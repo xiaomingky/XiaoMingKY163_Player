@@ -74,11 +74,18 @@ const formatNotes = (raw) => {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 30000;
+  will-change: opacity;
+}
+.dialog-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .update-dialog {
   background: #fff;
@@ -89,6 +96,8 @@ const formatNotes = (raw) => {
   flex-direction: column;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.2);
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 .dialog-header {
   display: flex;
@@ -182,7 +191,10 @@ const formatNotes = (raw) => {
 .btn-download:hover { box-shadow: 0 4px 20px rgba(99,102,241,0.4); transform: translateY(-1px); }
 .btn-download.loading { opacity: 0.7; pointer-events: none; }
 
-.dialog-enter-active, .dialog-leave-active { transition: all 0.3s ease; }
+.dialog-enter-active { transition: opacity 0.2s ease; }
+.dialog-leave-active { transition: opacity 0.15s ease; }
 .dialog-enter-from, .dialog-leave-to { opacity: 0; }
-.dialog-enter-from .update-dialog, .dialog-leave-to .update-dialog { transform: scale(0.9) translateY(20px); }
+.dialog-enter-from .update-dialog { transform: scale(0.95) translateY(12px); }
+.dialog-leave-to .update-dialog { transform: scale(0.98); }
+.update-dialog { transition: transform 0.2s ease; }
 </style>

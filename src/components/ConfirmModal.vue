@@ -28,11 +28,18 @@ const messageStore = useMessageStore()
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 20000;
+  will-change: opacity;
+}
+.confirm-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .confirm-dialog {
@@ -42,6 +49,8 @@ const messageStore = useMessageStore()
   width: 380px;
   text-align: center;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  position: relative;
+  z-index: 1;
 }
 
 .confirm-icon {
@@ -105,16 +114,11 @@ const messageStore = useMessageStore()
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
-.confirm-enter-active,
-.confirm-leave-active {
-  transition: all 0.25s ease;
-}
+.confirm-enter-active { transition: opacity 0.2s ease; }
+.confirm-leave-active { transition: opacity 0.15s ease; }
 .confirm-enter-from,
-.confirm-leave-to {
-  opacity: 0;
-}
-.confirm-enter-from .confirm-dialog,
-.confirm-leave-to .confirm-dialog {
-  transform: scale(0.9) translateY(10px);
-}
+.confirm-leave-to { opacity: 0; }
+.confirm-enter-from .confirm-dialog { transform: scale(0.95) translateY(8px); }
+.confirm-leave-to .confirm-dialog { transform: scale(0.98); }
+.confirm-dialog { transition: transform 0.2s ease; }
 </style>

@@ -1000,12 +1000,18 @@ const openGithub = () => {
 
 /* 赞赏弹窗 */
 .donate-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
     display: flex; align-items: center; justify-content: center; z-index: 40000;
+    will-change: opacity;
+}
+.donate-overlay::after {
+    content: ''; position: absolute; inset: 0;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .donate-modal {
     background: #fff; border-radius: 16px; width: 320px; text-align: center;
     box-shadow: 0 20px 60px rgba(0,0,0,0.2); overflow: hidden;
+    position: relative; z-index: 1;
 }
 .donate-header {
     padding: 20px 20px 0; position: relative;
@@ -1017,9 +1023,12 @@ const openGithub = () => {
 .donate-qr { width: 220px; height: 220px; object-fit: contain; border-radius: 8px; }
 .donate-thanks { font-size: 13px; color: #f59e0b; padding-bottom: 16px; margin: 0; }
 
-.donate-enter-active, .donate-leave-active { transition: all 0.25s ease; }
+.donate-enter-active { transition: opacity 0.2s ease; }
+.donate-leave-active { transition: opacity 0.15s ease; }
 .donate-enter-from, .donate-leave-to { opacity: 0; }
-.donate-enter-from .donate-modal, .donate-leave-to .donate-modal { transform: scale(0.9) translateY(10px); }
+.donate-enter-from .donate-modal { transform: scale(0.95) translateY(8px); }
+.donate-leave-to .donate-modal { transform: scale(0.98); }
+.donate-modal { transition: transform 0.2s ease; }
 
 .dropdown-header {
     display: flex;

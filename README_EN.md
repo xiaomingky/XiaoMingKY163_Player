@@ -2,7 +2,7 @@
 
 > **This project is entirely created by AI (Claude Code)** | [中文版](README.md)
 
-A beautiful, feature-rich desktop music player built with **Vue 3** + **Electron**, powered by the Netease Cloud Music API.
+A beautiful, feature-rich desktop music player built with **Vue 3** + **Electron**, integrated with Netease Cloud Music API for online music playback, search, and playlist management.
 
 ---
 
@@ -120,16 +120,18 @@ The built installer will be in the `release/` folder.
 
 ### 1. Netease Cloud Music API
 
-This project requires a **Netease Cloud Music API** service. Deploy your own instance.
+This project integrates the Netease Cloud Music API. You need to configure an API server URL. Either:
+- **Self-host**: Deploy [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) and get your API URL
+- **Or use a shared API URL** from someone else (just paste it in)
 
-**Recommended:** [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)
-
-After deploying, change the `baseURL` in `src/api/index.js`:
+Open `src/api/index.js` and change the `baseURL` at **line 4**:
 
 ```js
+// src/api/index.js  line 4
 const request = axios.create({
-    baseURL: 'https://your-netease-api-server.com',  // ← Your API server URL
-    ...
+    baseURL: 'https://your-netease-api-server.com',  // ← Your API URL (self-hosted or shared)
+    timeout: 30000,
+    withCredentials: true
 })
 ```
 

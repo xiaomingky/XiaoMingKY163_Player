@@ -2,7 +2,7 @@
 
 > **本项目完全由 AI (Claude Code) 创作** | [English Version](README_EN.md)
 
-一款精美的桌面音乐播放器，基于 **Vue 3** + **Electron** 构建，使用网易云音乐 API。
+一款精美的桌面音乐播放器，基于 **Vue 3** + **Electron** 构建，集成网易云音乐 API，支持在线音乐播放/搜索/歌单管理。
 
 ---
 
@@ -119,16 +119,18 @@ npm run build
 
 ### 1. 网易云音乐 API
 
-本项目需要一个**网易云音乐 API 服务**，请自行部署或使用他人成品。
+本项目集成网易云音乐 API，需配置 API 服务地址。你可以：
+- **自己部署**：[NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)，部署后获得你的 API 地址
+- **或使用他人分享的成品 API 地址**（直接填入即可）
 
-**推荐：** [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)
-
-部署后修改 `src/api/index.js` 中的 `baseURL`：
+打开 `src/api/index.js`，修改第 **4 行** 的 `baseURL`：
 
 ```js
+// src/api/index.js  第 4 行
 const request = axios.create({
-    baseURL: 'https://your-netease-api-server.com',  // ← 改为你的 API 地址
-    ...
+    baseURL: 'https://your-netease-api-server.com',  // ← 改为你的 API 地址（自己部署的或他人成品）
+    timeout: 30000,
+    withCredentials: true
 })
 ```
 

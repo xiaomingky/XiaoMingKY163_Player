@@ -58,6 +58,11 @@
         }
       ]
     },
+    "publish": {
+      "provider": "github",
+      "owner": "xiaomingky",
+      "repo": "XiaoMingKY163_Player"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

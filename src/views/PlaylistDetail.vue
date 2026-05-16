@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import request, { getPlaylistDetail, getCommentPlaylist } from '../api'
+import request, { getPlaylistDetail, getCommentPlaylist, playlistTracks } from '../api'
 import { usePlayerStore } from '../store/player'
 import { useUserStore } from '../store/user'
 import { useMessageStore } from '../store/message'
@@ -55,6 +55,11 @@ watch(() => route.params.id, (newId) => {
   if (newId) fetchDetail()
 }, { immediate: true })
 
+// 每次导航到歌单页面都强制刷新
+watch(() => route.fullPath, () => {
+  if (route.params.id) fetchDetail()
+})
+
 const formatTime = (ms) => {
   const seconds = ms / 1000
   const m = Math.floor(seconds / 60)
@@ -79,6 +84,24 @@ const toggleLike = async (track) => {
     } catch (e) {
         console.error('Toggle like fail:', e)
     }
+}
+
+const removingTrack = ref(null)
+const removeTrack = async (track) => {
+    if (!playlist.value || !isOwner.value) return
+    if (removingTrack.value === track.id) return
+    removingTrack.value = track.id
+    try {
+        const res = await playlistTracks('del', playlist.value.id, track.id)
+        if (res.code === 200) {
+            tracks.value = tracks.value.filter(t => t.id !== track.id)
+            playlist.value.trackCount--
+            messageStore.success('已从歌单移除')
+        } else {
+            messageStore.error('移除失败')
+        }
+    } catch (e) { messageStore.error('移除出错') }
+    finally { removingTrack.value = null }
 }
 
 const activeTab = ref('tracks')
@@ -277,6 +300,7 @@ const handleCoverChange = async (e) => {
                           @click.stop="toggleLike(track)"
                         /> 
                         <Download :size="14" class="icon" />
+                        <Trash2 v-if="isOwner" :size="14" class="icon clickable remove-icon" @click.stop="removeTrack(track)" title="从歌单移除" />
                     </td>
                     <td class="title-cell" :title="track.name">
                         <div class="title-container">
@@ -555,6 +579,9 @@ const handleCoverChange = async (e) => {
 .icon:hover {
   color: #333;
   opacity: 1;
+}
+.remove-icon:hover {
+  color: #ff4d4f !important;
 }
 
 .title-container {

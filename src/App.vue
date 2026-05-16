@@ -55,6 +55,7 @@ const showUserMenu = ref(false)
 const isMaximized = ref(false)
 const showCreatePlaylist = ref(false)
 const newPlaylistName = ref('')
+const showSpeedMenu = ref(false)
 const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
 const showDonate = ref(false)
@@ -716,6 +717,20 @@ const openGithub = () => {
         </div>
         <EqPanel />
         
+        <div class="speed-selector-container">
+            <div class="quality-badge clickable" @click="showSpeedMenu = !showSpeedMenu">
+                {{ playerStore.playbackRate }}x
+            </div>
+            <div v-if="showSpeedMenu" class="quality-menu no-drag">
+                <div v-for="s in [0.5,0.75,1,1.25,1.5,2]" :key="s"
+                    class="quality-option" :class="{ active: playerStore.playbackRate === s }"
+                    @click="playerStore.setPlaybackRate(s); showSpeedMenu = false">
+                    {{ s }}x
+                    <Check v-if="playerStore.playbackRate === s" :size="14" />
+                </div>
+            </div>
+        </div>
+
         <div class="quality-selector-container">
             <div class="quality-badge clickable" @click="showQualityMenu = !showQualityMenu">
                 {{ qualityLabels[playerStore.quality] || '标准' }}
@@ -1354,6 +1369,10 @@ const openGithub = () => {
 }
 
 /* Quality Selector Styles */
+.speed-selector-container {
+    position: relative;
+    z-index: 100;
+}
 .quality-selector-container {
     position: relative;
     z-index: 100;

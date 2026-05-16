@@ -39,7 +39,8 @@ export const usePlayerStore = defineStore('player', {
         currentDeviceId: localStorage.getItem('audio_device_id') || '',
         recentSongs: JSON.parse(localStorage.getItem('recent_songs') || '[]'),
         localSongs: JSON.parse(localStorage.getItem('local_songs') || '[]'),
-        quality: localStorage.getItem('music_quality') || 'standard', // standard, higher, exhigh, lossless
+        quality: localStorage.getItem('music_quality') || 'standard',
+        playbackRate: parseFloat(localStorage.getItem('playback_rate') || '1'),
         eqEnabled: false,
         eqPreset: 'default',
         eqBands: [
@@ -256,6 +257,7 @@ export const usePlayerStore = defineStore('player', {
                 this.audio.crossOrigin = isLocal ? null : "anonymous"
 
                 this.audio.src = url
+                this.audio.playbackRate = this.playbackRate
 
                 // 设置音频设备（在 src 之后，load 之前）
                 if (this.currentDeviceId && this.audio.setSinkId) {
@@ -759,13 +761,17 @@ export const usePlayerStore = defineStore('player', {
         setQuality(q) {
             this.quality = q
             localStorage.setItem('music_quality', q)
-            // 如果正在播放且不是本地歌曲，尝试切换音质重新播放
             if (this.currentSong && this.currentSong.id && !String(this.currentSong.id).startsWith('local-') && this.isPlaying) {
                 const currentTime = this.currentTime
                 this.playSong(this.currentSong).then(() => {
                     this.seek(currentTime)
                 })
             }
+        },
+        setPlaybackRate(rate) {
+            this.playbackRate = rate
+            localStorage.setItem('playback_rate', rate)
+            if (this.audio) this.audio.playbackRate = rate
         },
         toggleDesktopLyrics() {
             this.showDesktopLyrics = !this.showDesktopLyrics

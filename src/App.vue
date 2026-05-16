@@ -55,7 +55,7 @@ const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
 
 // 自动更新检测
-const updateInfo = ref({ available: false, version: '', downloading: false, downloaded: false, progress: 0 })
+const updateInfo = ref({ available: false, version: '', notes: '', downloading: false, downloaded: false, progress: 0 })
 const startDownloadUpdate = () => {
     updateInfo.value.downloading = true
     const b = getBridge(); if (b?.send) b.send('start-download-update')
@@ -158,7 +158,7 @@ onMounted(() => {
     })
 
     // 更新检测事件
-    b.on('update-available', (_, version) => { updateInfo.value = { ...updateInfo.value, available: true, version } })
+    b.on('update-available', (_, version, notes) => { updateInfo.value = { ...updateInfo.value, available: true, version, notes: notes || '' } })
     b.on('update-not-available', () => { updateInfo.value.available = false })
     b.on('update-download-progress', (_, pct) => { updateInfo.value.progress = pct })
     b.on('update-downloaded', () => { updateInfo.value = { ...updateInfo.value, downloading: false, downloaded: true } })
@@ -391,7 +391,11 @@ const openAuthorLink = () => {
         <button v-if="!updateInfo.downloading && !updateInfo.downloaded" class="update-btn" @click="startDownloadUpdate">立即更新</button>
         <span v-if="updateInfo.downloading" class="update-progress">下载中 {{ Math.round(updateInfo.progress) }}%</span>
         <button v-if="updateInfo.downloaded" class="update-btn ready" @click="installUpdate">点击安装并重启</button>
+        <span v-if="updateInfo.notes" class="update-notes-toggle" @click="updateInfo.showNotes = !updateInfo.showNotes">
+          {{ updateInfo.showNotes ? '收起' : '查看更新内容' }}
+        </span>
         <X :size="14" class="update-close" @click="updateInfo.available = false" />
+        <div v-if="updateInfo.showNotes && updateInfo.notes" class="update-notes" v-html="updateInfo.notes.replace(/\n/g, '<br>')"></div>
       </div>
       <SongDetail />
       <LoginModal :show="showLogin" @close="showLogin = false" />
@@ -798,6 +802,31 @@ const openAuthorLink = () => {
     opacity: 0.6;
 }
 .update-close:hover { opacity: 1; }
+.update-notes-toggle {
+    font-size: 11px;
+    cursor: pointer;
+    opacity: 0.7;
+    text-decoration: underline;
+}
+.update-notes-toggle:hover { opacity: 1; }
+.update-notes {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 480px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #1e1b4b;
+    color: #e2e8f0;
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.7;
+    margin-top: 4px;
+    z-index: 9999;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+}
 
 /* App Specific Layout Fixes */
 .header {

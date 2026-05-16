@@ -664,7 +664,13 @@ function checkForUpdates() {
 }
 
 autoUpdater.on('update-available', (info) => {
-    win?.webContents.send('update-available', info.version)
+    let notes = ''
+    if (typeof info.releaseNotes === 'string') {
+        notes = info.releaseNotes
+    } else if (Array.isArray(info.releaseNotes)) {
+        notes = info.releaseNotes.map(n => n.note || '').join('\n')
+    }
+    win?.webContents.send('update-available', info.version, notes)
 })
 
 autoUpdater.on('update-not-available', () => {

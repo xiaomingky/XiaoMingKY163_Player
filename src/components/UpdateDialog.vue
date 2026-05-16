@@ -14,11 +14,16 @@ const downloading = ref(false)
 
 const handleDownload = () => {
     downloading.value = true
+    // 优先用 bridge 打开（Electron 内会用默认浏览器下载）
     const bridge = window.__ELECTRON_BRIDGE__ || window.bridge || window.ipcHandler
     if (bridge?.send) {
         bridge.send('open-external', props.downloadUrl)
     } else {
-        window.open(props.downloadUrl, '_blank')
+        // 直接用 a 标签触发下载
+        const a = document.createElement('a')
+        a.href = props.downloadUrl
+        a.download = ''
+        a.click()
     }
 }
 

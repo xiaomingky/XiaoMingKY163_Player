@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
@@ -656,6 +656,7 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
 
 // --- 自动更新（GitHub API 直连）---
 function checkForUpdates() {
+    win?.webContents.send('update-checking')
     const opts = {
         hostname: 'api.github.com',
         path: '/repos/xiaomingky/XiaoMingKY163_Player/releases/latest',
@@ -667,23 +668,29 @@ function checkForUpdates() {
         res.on('end', () => {
             try {
                 const release = JSON.parse(body)
-                const latestVersion = (release.tag_name || '').replace('v', '')
+                const tag = release.tag_name || ''
+                const latestVersion = tag.replace('v', '')
                 const currentVersion = app.getVersion()
                 const notes = release.body || ''
+                // 构建直链下载地址（可靠，不依赖 API 返回 assets）
+                const directDownload = `https://github.com/xiaomingky/XiaoMingKY163_Player/releases/download/${tag}/XiaoMingKY163_Player_Setup_${latestVersion}.exe`
+                const downloadUrl = release.assets?.[0]?.browser_download_url || directDownload
+                console.log('[Update] latest:', tag, 'current:', currentVersion)
                 if (latestVersion && latestVersion !== currentVersion) {
-                    const downloadUrl = release.assets?.[0]?.browser_download_url || release.html_url
-                    win?.webContents.send('update-available', 'v' + latestVersion, notes, downloadUrl)
+                    win?.webContents.send('update-available', tag, notes, downloadUrl)
                 } else {
                     win?.webContents.send('update-not-available', currentVersion)
                 }
-            } catch(_) {}
+            } catch(e) {
+                console.error('[Update] Parse error:', e)
+                win?.webContents.send('update-error', '检查更新失败')
+            }
         })
-    }).on('error', () => {})
+    }).on('error', (e) => {
+        console.error('[Update] Network error:', e)
+        win?.webContents.send('update-error', '网络连接失败')
+    })
 }
-
-ipcMain.on('start-download-update', () => {
-    shell.openExternal('https://github.com/xiaomingky/XiaoMingKY163_Player/releases/latest')
-})
 
 app.whenReady().then(() => {
     // Grant media permissions for audio device enumeration

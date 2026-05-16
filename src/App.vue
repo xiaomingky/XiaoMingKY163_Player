@@ -154,8 +154,10 @@ onMounted(() => {
     })
 
     // 更新检测事件
+    b.on('update-checking', () => { useMessageStore().info('正在检查更新...', 2000) })
     b.on('update-available', (_, version, notes, downloadUrl) => { updateInfo.value = { available: true, version, notes: notes || '', downloadUrl: downloadUrl || '' } })
-    b.on('update-not-available', (_, currentVersion) => { useMessageStore().success(`已是最新版本 v${currentVersion}`, 2500) })
+    b.on('update-not-available', (_, currentVersion) => { useMessageStore().success(`已是最新版本 v${currentVersion}`, 3000) })
+    b.on('update-error', (_, msg) => { useMessageStore().error(msg, 3000) })
     b.on('update-download-progress', (_, pct) => { updateInfo.value.progress = pct })
     b.on('update-downloaded', () => { updateInfo.value = { ...updateInfo.value, downloading: false, downloaded: true } })
 

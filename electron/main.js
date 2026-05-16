@@ -671,7 +671,8 @@ function checkForUpdates() {
                 const currentVersion = app.getVersion()
                 const notes = release.body || ''
                 if (latestVersion && latestVersion !== currentVersion) {
-                    win?.webContents.send('update-available', 'v' + latestVersion, notes)
+                    const downloadUrl = release.assets?.[0]?.browser_download_url || release.html_url
+                    win?.webContents.send('update-available', 'v' + latestVersion, notes, downloadUrl)
                 } else {
                     win?.webContents.send('update-not-available', currentVersion)
                 }

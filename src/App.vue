@@ -9,6 +9,7 @@ import LoginModal from './components/LoginModal.vue'
 import MvPlayer from './components/MvPlayer.vue'
 import Toast from './components/Toast.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
+import UpdateDialog from './components/UpdateDialog.vue'
 import EqPanel from './components/EqPanel.vue'
 import { 
   Search, 
@@ -37,6 +38,7 @@ import {
   Keyboard,
   MonitorSpeaker,
   Check,
+  Github,
   Film
 } from 'lucide-vue-next'
 
@@ -56,10 +58,7 @@ const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
 
 // 自动更新检测
-const updateInfo = ref({ available: false, checked: false, version: '', notes: '', showNotes: false })
-const startDownloadUpdate = () => {
-    const b = getBridge(); if (b?.send) b.send('start-download-update')
-}
+const updateInfo = ref({ available: false, version: '', notes: '', downloadUrl: '' })
 
 const getFooterCoverUrl = () => {
     const picUrl = playerStore.currentSong.al?.picUrl || ''
@@ -155,8 +154,8 @@ onMounted(() => {
     })
 
     // 更新检测事件
-    b.on('update-available', (_, version, notes) => { updateInfo.value = { ...updateInfo.value, available: true, checked: true, version, notes: notes || '' } })
-    b.on('update-not-available', (_, currentVersion) => { updateInfo.value = { ...updateInfo.value, available: false, checked: true, version: currentVersion || '', notes: '' } })
+    b.on('update-available', (_, version, notes, downloadUrl) => { updateInfo.value = { available: true, version, notes: notes || '', downloadUrl: downloadUrl || '' } })
+    b.on('update-not-available', (_, currentVersion) => { useMessageStore().success(`已是最新版本 v${currentVersion}`, 2500) })
     b.on('update-download-progress', (_, pct) => { updateInfo.value.progress = pct })
     b.on('update-downloaded', () => { updateInfo.value = { ...updateInfo.value, downloading: false, downloaded: true } })
 
@@ -374,6 +373,10 @@ const openAuthorLink = () => {
     const b = getBridge()
     if (b) b.send('open-external', 'https://xiaomingky.cn')
 }
+const openGithub = () => {
+    const b = getBridge()
+    if (b) b.send('open-external', 'https://github.com/xiaomingky/XiaoMingKY163_Player')
+}
 
 </script>
 
@@ -381,23 +384,9 @@ const openAuthorLink = () => {
   <div class="app-container" :class="{ 'is-desktop-lyrics': route.path === '/desktop-lyrics' }">
     <Toast />
     <ConfirmModal />
+    <UpdateDialog :visible="updateInfo.available" :version="updateInfo.version" :notes="updateInfo.notes" :downloadUrl="updateInfo.downloadUrl" @close="updateInfo.available = false" />
 
     <div v-if="route.path !== '/desktop-lyrics'" class="normal-layout-wrapper">
-      <!-- 更新提示条 -->
-      <div v-if="updateInfo.available || updateInfo.checked" class="update-bar" :class="{ uptodate: !updateInfo.available }">
-        <template v-if="updateInfo.available">
-          <span class="update-text">🎉 发现新版本 {{ updateInfo.version }}，</span>
-          <button class="update-btn" @click="startDownloadUpdate">立即下载</button>
-          <span v-if="updateInfo.notes" class="update-notes-toggle" @click="updateInfo.showNotes = !updateInfo.showNotes">
-            {{ updateInfo.showNotes ? '收起' : '查看更新内容' }}
-          </span>
-          <div v-if="updateInfo.showNotes && updateInfo.notes" class="update-notes" v-html="updateInfo.notes.replace(/\n/g, '<br>')"></div>
-        </template>
-        <template v-else>
-          <span class="update-text">✅ 已是最新版本 {{ updateInfo.version ? 'v' + updateInfo.version : '' }}</span>
-        </template>
-        <X :size="14" class="update-close" @click="updateInfo.available = false; updateInfo.checked = false" />
-      </div>
       <SongDetail />
       <LoginModal :show="showLogin" @close="showLogin = false" />
       <MvPlayer />
@@ -458,6 +447,9 @@ const openAuthorLink = () => {
             </div>
             <div class="author-tag clickable no-drag" @click="openAuthorLink">
                 By XiaoMingKY
+            </div>
+            <div class="github-link no-drag" @click="openGithub" title="GitHub">
+                <Github :size="16" />
             </div>
           </div>
         </div>
@@ -768,67 +760,6 @@ const openAuthorLink = () => {
     height: 100%;
 }
 
-/* 更新提示条 */
-.update-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #6366f1, #4f46e5);
-    color: #fff;
-    padding: 6px 16px;
-    font-size: 13px;
-    flex-shrink: 0;
-    z-index: 5001;
-    position: relative;
-}
-.update-bar.uptodate {
-    background: linear-gradient(135deg, #059669, #047857);
-}
-.update-btn {
-    background: #fff;
-    color: #4f46e5;
-    border: none;
-    padding: 3px 14px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.update-btn:hover { background: #eef2ff; }
-.update-close {
-    position: absolute;
-    right: 12px;
-    cursor: pointer;
-    opacity: 0.6;
-}
-.update-close:hover { opacity: 1; }
-.update-notes-toggle {
-    font-size: 11px;
-    cursor: pointer;
-    opacity: 0.7;
-    text-decoration: underline;
-}
-.update-notes-toggle:hover { opacity: 1; }
-.update-notes {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 480px;
-    max-height: 300px;
-    overflow-y: auto;
-    background: #1e1b4b;
-    color: #e2e8f0;
-    padding: 14px 18px;
-    border-radius: 8px;
-    font-size: 12px;
-    line-height: 1.7;
-    margin-top: 4px;
-    z-index: 9999;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-}
 
 /* App Specific Layout Fixes */
 .header {
@@ -1018,6 +949,17 @@ const openAuthorLink = () => {
 .author-tag:hover {
     color: white;
     text-shadow: 0 0 8px rgba(255,255,255,0.4);
+}
+.github-link {
+    margin-left: 12px;
+    color: rgba(255,255,255,0.6);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.github-link:hover {
+    color: white;
 }
 
 .dropdown-header {

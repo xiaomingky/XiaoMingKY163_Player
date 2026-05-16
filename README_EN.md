@@ -205,6 +205,14 @@ Go to the [Releases](https://github.com/xiaomingky/XiaoMingKY163_Player/releases
 
 ---
 
+## ☕ Support
+
+If you like this app, buy the developer a coffee!
+
+![Donation QR](showimage/赞赏.png)
+
+---
+
 ## 📄 License
 
 MIT

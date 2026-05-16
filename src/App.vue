@@ -39,6 +39,7 @@ import {
   MonitorSpeaker,
   Check,
   Github,
+  HeartHandshake,
   Film
 } from 'lucide-vue-next'
 
@@ -56,6 +57,7 @@ const showCreatePlaylist = ref(false)
 const newPlaylistName = ref('')
 const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
+const showDonate = ref(false)
 
 // 自动更新检测
 const updateInfo = ref({ available: false, version: '', notes: '', downloadUrl: '' })
@@ -388,6 +390,23 @@ const openGithub = () => {
     <ConfirmModal />
     <UpdateDialog :visible="updateInfo.available" :version="updateInfo.version" :notes="updateInfo.notes" :downloadUrl="updateInfo.downloadUrl" @close="updateInfo.available = false" />
 
+    <!-- 赞赏弹窗 -->
+    <Transition name="donate">
+      <div v-if="showDonate" class="donate-overlay" @click.self="showDonate = false">
+        <div class="donate-modal">
+          <div class="donate-header">
+            <h3>赞赏支持</h3>
+            <span class="donate-sub">如果觉得好用，欢迎请开发者喝杯咖啡 ☕</span>
+            <X :size="18" class="clickable" @click="showDonate = false" />
+          </div>
+          <div class="donate-body">
+            <img src="/赞赏.png" alt="赞赏码" class="donate-qr" />
+          </div>
+          <p class="donate-thanks">感谢你的支持 ❤️</p>
+        </div>
+      </div>
+    </Transition>
+
     <div v-if="route.path !== '/desktop-lyrics'" class="normal-layout-wrapper">
       <SongDetail />
       <LoginModal :show="showLogin" @close="showLogin = false" />
@@ -452,6 +471,9 @@ const openGithub = () => {
             </div>
             <div class="github-link no-drag" @click="openGithub" title="GitHub">
                 <Github :size="16" />
+            </div>
+            <div class="donate-link no-drag" @click="showDonate = true" title="赞赏支持">
+                <HeartHandshake :size="16" />
             </div>
           </div>
         </div>
@@ -963,6 +985,41 @@ const openGithub = () => {
 .github-link:hover {
     color: white;
 }
+.donate-link {
+    margin-left: 10px;
+    color: #f59e0b;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.donate-link:hover {
+    color: #fbbf24;
+    transform: scale(1.1);
+}
+
+/* 赞赏弹窗 */
+.donate-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 40000;
+}
+.donate-modal {
+    background: #fff; border-radius: 16px; width: 320px; text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2); overflow: hidden;
+}
+.donate-header {
+    padding: 20px 20px 0; position: relative;
+}
+.donate-header h3 { margin: 0; font-size: 18px; color: #1a1a2e; }
+.donate-sub { font-size: 12px; color: #999; display: block; margin-top: 4px; }
+.donate-header .clickable { position: absolute; top: 16px; right: 16px; color: #bbb; }
+.donate-body { padding: 16px 20px; }
+.donate-qr { width: 220px; height: 220px; object-fit: contain; border-radius: 8px; }
+.donate-thanks { font-size: 13px; color: #f59e0b; padding-bottom: 16px; margin: 0; }
+
+.donate-enter-active, .donate-leave-active { transition: all 0.25s ease; }
+.donate-enter-from, .donate-leave-to { opacity: 0; }
+.donate-enter-from .donate-modal, .donate-leave-to .donate-modal { transform: scale(0.9) translateY(10px); }
 
 .dropdown-header {
     display: flex;

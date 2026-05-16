@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
@@ -8,21 +8,21 @@ import axios from 'axios'
 import { exec, execFile } from 'node:child_process'
 import { autoUpdater } from 'electron-updater'
 
-// --- Win7 鍏煎鎬у垵濮嬪寲 ---
+// --- Win7 兼容性初始化 ---
 if (process.platform === 'win32') {
-    // 寮哄埗浣跨敤杞欢娓叉煋鎴栫壒瀹氱殑娓叉煋闄愬埗浼氬鑷翠弗閲嶅崱椤裤€?
-    // 鎴戜滑閲囧彇鈥滅ǔ鍋ユā寮忊€濓細闄愬埗楂樿礋杞?GL 鐗规€э紝浣嗕繚鐣欏熀鏈‖浠跺姞閫熴€?
+    // 强制使用软件渲染或特定的渲染限制会导致严重卡顿。
+    // 我们采取“稳健模式”：限制高负载 GL 特性，但保留基本硬件加速。
     app.commandLine.appendSwitch('disable-software-rasterizer');
     app.commandLine.appendSwitch('ignore-gpu-blacklist');
-    // 濡傛灉鍦ㄦ瀬鏃х殑 Win7 涓婂穿婧冿紝鍙互灏濊瘯鍙栨秷娉ㄩ噴涓嬮潰杩欒杩涜褰诲簳闄嶇骇
+    // 如果在极旧的 Win7 上崩溃，可以尝试取消注释下面这行进行彻底降级
     // app.disableHardwareAcceleration(); 
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '..')
 
-// 璁剧疆姝ｅ紡鍚嶇О锛岀‘淇濆璇濇鏍囬姝ｇ‘
-app.name = '鑼楅煹鏃跺厜'
+// 设置正式名称，确保对话框标题正确
+app.name = '茗韵时光'
 
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
@@ -46,16 +46,16 @@ function createTray() {
     }
 
     const contextMenu = Menu.buildFromTemplate([
-        { label: '鏄剧ず涓荤獥鍙?, click: () => { win.show(); win.focus() } },
+        { label: '显示主窗口', click: () => { win.show(); win.focus() } },
         { type: 'separator' },
-        { label: '涓婁竴棣?, click: () => win.webContents.send('player-command', 'prev') },
-        { label: '鎾斁/鏆傚仠', click: () => win.webContents.send('player-command', 'togglePlay') },
-        { label: '涓嬩竴棣?, click: () => win.webContents.send('player-command', 'next') },
+        { label: '上一首', click: () => win.webContents.send('player-command', 'prev') },
+        { label: '播放/暂停', click: () => win.webContents.send('player-command', 'togglePlay') },
+        { label: '下一首', click: () => win.webContents.send('player-command', 'next') },
         { type: 'separator' },
-        { label: '閫€鍑?, click: () => { tray.destroy(); tray = null; app.quit() } }
+        { label: '退出', click: () => { tray.destroy(); tray = null; app.quit() } }
     ])
 
-    tray.setToolTip('鑼楅煹鏃跺厜')
+    tray.setToolTip('茗韵时光')
     tray.setContextMenu(contextMenu)
 
     tray.on('double-click', () => {
@@ -64,7 +64,7 @@ function createTray() {
     })
 }
 
-// Register protocols (Privileged 淇濇寔涓嶅彉)
+// Register protocols (Privileged 保持不变)
 protocol.registerSchemesAsPrivileged([
     { scheme: 'local-file', privileges: { bypassCSP: true, stream: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
     { scheme: 'song-cover', privileges: { bypassCSP: true, stream: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
@@ -81,20 +81,20 @@ function createWindow() {
         minWidth: 1022,
         minHeight: 720,
         frame: false,
-        backgroundColor: '#ffffff', // Win7 涓嬮槻姝㈤€忔槑绐楀彛闂儊
-        icon: path.join(process.env.VITE_PUBLIC, 'icon.png'), // 璁剧疆鍥炬爣
+        backgroundColor: '#ffffff', // Win7 下防止透明窗口闪烁
+        icon: path.join(process.env.VITE_PUBLIC, 'icon.png'), // 设置图标
         webPreferences: {
             preload: preloadPath,
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
-            webSecurity: false // 鍏佽璺ㄥ煙
+            webSecurity: false // 允许跨域
         },
     })
 
     if (VITE_DEV_SERVER_URL) {
         win.loadURL(VITE_DEV_SERVER_URL)
-            } else {
+    } else {
         win.loadFile(path.join(RENDERER_DIST, 'index.html'))
     }
 
@@ -118,11 +118,6 @@ function createWindow() {
         }
     })
 
-    win.webContents.on('before-input-event', (event, input) => {
-        if (input.key.toLowerCase() === 'f12' && input.type === 'keyDown') {
-                        event.preventDefault()
-        }
-    })
 }
 let lyricWin = null
 let unlockWin = null
@@ -143,7 +138,7 @@ function createUnlockWindow() {
         .btn{display:flex;align-items:center;gap:4px;padding:5px 12px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);border-radius:14px;color:#fff;font-size:12px;cursor:pointer;font-family:-apple-system,sans-serif;backdrop-filter:blur(6px);transition:all 0.2s;}
         .btn:hover{background:rgba(0,0,0,0.7);border-color:rgba(255,255,255,0.4);}
     </style></head><body>
-        <button class="btn" onclick="unlock()">馃敁瑙ｉ攣</button>
+        <button class="btn" onclick="unlock()">🔓解锁</button>
         <script>const {ipcRenderer}=require('electron');function unlock(){ipcRenderer.send('unlock-lyric-window')}</script>
     </body></html>`
 
@@ -201,13 +196,13 @@ function createLyricWindow() {
     lyricWin.on('move', () => placeUnlockWindow())
     lyricWin.on('resize', () => placeUnlockWindow())
 
-    // 纭繚绐楀彛鍑嗗濂藉悗绔嬪嵆鍚屾涓€娆＄姸鎬?
+    // 确保窗口准备好后立即同步一次状态
     lyricWin.webContents.on('did-finish-load', () => {
         win.webContents.send('request-lyric-sync')
     })
 }
 
-// Global IPC handlers (淇濇寔涓嶅彉)
+// Global IPC handlers (保持不变)
 ipcMain.on('window-minimize', () => {
     const currentWin = BrowserWindow.getFocusedWindow() || win
     currentWin?.minimize()
@@ -240,9 +235,9 @@ ipcMain.on('toggle-desktop-lyrics', (_, show) => {
     }
 })
 
-// 鎵弿瀛椾綋鐩綍
+// 扫描字体目录
 ipcMain.handle('scan-fonts', async () => {
-    // 鎵撳寘鍚庢斁缃湪 resources/font锛屽紑鍙戞椂鍦ㄩ」鐩牴鐩綍 /font
+    // 打包后放置在 resources/font，开发时在项目根目录 /font
     const fontDir = app.isPackaged
         ? path.join(process.resourcesPath, 'font')
         : path.join(process.env.APP_ROOT, 'font')
@@ -301,11 +296,11 @@ ipcMain.on('unlock-lyric-window', () => {
         lyricWin.setMovable(true)
     }
     if (unlockWin) unlockWin.hide()
-    // 閫氱煡姝岃瘝绐楀彛鏇存柊UI
+    // 通知歌词窗口更新UI
     lyricWin?.webContents.send('lyric-lock-state-changed', false)
 })
 
-// 鏍稿績閫掑綊鎵弿鍑芥暟
+// 核心递归扫描函数
 async function scanAudioFiles(filePath) {
     const stats = fs.statSync(filePath)
     if (stats.isDirectory()) {
@@ -322,9 +317,9 @@ async function scanAudioFiles(filePath) {
         try {
             const metadata = await mm.parseFile(filePath)
             const name = metadata.common.title || path.basename(filePath, path.extname(filePath))
-            const artist = metadata.common.artist || '鏈煡姝屾墜'
+            const artist = metadata.common.artist || '未知歌手'
 
-            const album = metadata.common.album || '鏈湴纾佺洏'
+            const album = metadata.common.album || '本地磁盘'
             const duration = (metadata.format.duration || 0) * 1000
             const formattedPath = filePath.replace(/\\/g, '/')
             const encodedPath = encodeURI(formattedPath)
@@ -344,11 +339,11 @@ async function scanAudioFiles(filePath) {
             return [{
                 id: 'local-' + Date.now() + Math.random(),
                 name: path.basename(filePath, path.extname(filePath)),
-                artist: '鏈湴闊充箰', ar: [{ name: '鏈湴闊充箰' }],
+                artist: '本地音乐', ar: [{ name: '本地音乐' }],
                 path: filePath,
                 url: `local-file:///${encodedPath}`,
                 size: stats.size, dt: 0, duration: 0,
-                al: { name: '鏈湴纾佺洏', picUrl: '' }
+                al: { name: '本地磁盘', picUrl: '' }
             }]
         }
     }
@@ -376,7 +371,7 @@ ipcMain.handle('open-directory-dialog', async () => {
     return await scanAudioFiles(filePaths[0])
 })
 
-// 鈹€鈹€ 鏈湴瑙嗛鎵弿 鈹€鈹€
+// ── 本地视频扫描 ──
 async function scanVideoFiles(filePath) {
     const stats = fs.statSync(filePath)
     if (stats.isDirectory()) {
@@ -393,12 +388,12 @@ async function scanVideoFiles(filePath) {
     if (videoExts.includes(ext)) {
         const formattedPath = filePath.replace(/\\/g, '/')
         const encodedPath = encodeURI(formattedPath)
-        // 灏濊瘯鎻愬彇瑙嗛鏃堕暱
+        // 尝试提取视频时长
         let duration = 0
         try {
             const metadata = await mm.parseFile(filePath, { duration: true })
             duration = (metadata.format.duration || 0) * 1000
-        } catch (e) { /* 蹇界暐瑙ｆ瀽閿欒 */ }
+        } catch (e) { /* 忽略解析错误 */ }
         return [{
             id: 'local-video-' + Date.now() + Math.random(),
             name: path.basename(filePath, ext),
@@ -451,7 +446,7 @@ ipcMain.handle('load-local-lyric', async (_, songPath) => {
     } catch (err) { return { success: false, error: err.message } }
 })
 
-// 淇濆瓨鑻辨枃瑙ｆ瀽缂撳瓨锛堟湰鍦版瓕鏇叉梺杈瑰瓨 .analysis.json锛?
+// 保存英文解析缓存（本地歌曲旁边存 .analysis.json）
 ipcMain.handle('save-english-analysis', async (_, { songPath, analysis }) => {
     try {
         const cachePath = songPath.replace(path.extname(songPath), '.analysis.json')
@@ -460,7 +455,7 @@ ipcMain.handle('save-english-analysis', async (_, { songPath, analysis }) => {
     } catch (err) { return { success: false, error: err.message } }
 })
 
-// 鍔犺浇鑻辨枃瑙ｆ瀽缂撳瓨
+// 加载英文解析缓存
 ipcMain.handle('load-english-analysis', async (_, songPath) => {
     try {
         const cachePath = songPath.replace(path.extname(songPath), '.analysis.json')
@@ -472,27 +467,27 @@ ipcMain.handle('load-english-analysis', async (_, songPath) => {
     } catch (err) { return { success: false, error: err.message } }
 })
 
-// 淇濆瓨鍦ㄧ嚎姝屾洸姝岃瘝鍒版湰鍦扮紦瀛橈紙鏀寔绂荤嚎浣跨敤锛?
+// 保存在线歌曲歌词到本地缓存（支持离线使用）
 ipcMain.handle('save-online-lyric', async (_, { songId, songName, artist, lrc, tlrc }) => {
     try {
-        // 浣跨敤 app.getPath('userData') 鑾峰彇鐢ㄦ埛鏁版嵁鐩綍
+        // 使用 app.getPath('userData') 获取用户数据目录
         const lyricsDir = path.join(app.getPath('userData'), 'lyrics_cache')
         if (!fs.existsSync(lyricsDir)) {
             fs.mkdirSync(lyricsDir, { recursive: true })
         }
         
-        // 鏂囦欢鍚嶆牸寮忥細{songId}_{songName}.lrc
+        // 文件名格式：{songId}_{songName}.lrc
         const safeName = songName.replace(/[<>:"/\\|?*]/g, '_').substring(0, 50)
         const fileName = `${songId}_${safeName}.lrc`
         const filePath = path.join(lyricsDir, fileName)
         
-        // 淇濆瓨姝岃瘝锛堝寘鍚師鏂囧拰缈昏瘧锛?
+        // 保存歌词（包含原文和翻译）
         let content = lrc || ''
         if (tlrc) {
             content += '\n---trans---\n' + tlrc
         }
         
-        // 娣诲姞鍏冩暟鎹ご閮?
+        // 添加元数据头部
         const meta = [
             `[ti:${songName}]`,
             `[ar:${artist}]`,
@@ -502,15 +497,15 @@ ipcMain.handle('save-online-lyric', async (_, { songId, songName, artist, lrc, t
         ].join('\n')
         
         fs.writeFileSync(filePath, meta + content, 'utf8')
-        console.log(`[LyricCache] 宸蹭繚瀛樻瓕璇? ${fileName}`)
+        console.log(`[LyricCache] 已保存歌词: ${fileName}`)
         return { success: true, path: filePath }
     } catch (err) { 
-        console.error('[LyricCache] 淇濆瓨澶辫触:', err)
+        console.error('[LyricCache] 保存失败:', err)
         return { success: false, error: err.message } 
     }
 })
 
-// 鍔犺浇鏈湴缂撳瓨鐨勫湪绾挎瓕璇?
+// 加载本地缓存的在线歌词
 ipcMain.handle('load-online-lyric-cache', async (_, songId) => {
     try {
         const lyricsDir = path.join(app.getPath('userData'), 'lyrics_cache')
@@ -519,7 +514,7 @@ ipcMain.handle('load-online-lyric-cache', async (_, songId) => {
             return { success: false, error: 'No cache directory' }
         }
         
-        // 鏌ユ壘鍖归厤鐨勬枃浠?
+        // 查找匹配的文件
         const files = fs.readdirSync(lyricsDir).filter(f => f.startsWith(songId + '_') && f.endsWith('.lrc'))
         
         if (files.length === 0) {
@@ -535,7 +530,7 @@ ipcMain.handle('load-online-lyric-cache', async (_, songId) => {
     }
 })
 
-// 淇濆瓨鍦ㄧ嚎姝屾洸鑻辨枃瑙ｆ瀽鍒版湰鍦帮紙鏀寔绂荤嚎浣跨敤锛?
+// 保存在线歌曲英文解析到本地（支持离线使用）
 ipcMain.handle('save-online-english-analysis', async (_, { songId, songName, artist, analysis }) => {
     try {
         const analysisDir = path.join(app.getPath('userData'), 'analysis_cache')
@@ -548,15 +543,15 @@ ipcMain.handle('save-online-english-analysis', async (_, { songId, songName, art
         const filePath = path.join(analysisDir, fileName)
         
         fs.writeFileSync(filePath, JSON.stringify(analysis, null, 2), 'utf8')
-        console.log(`[AnalysisCache] 宸蹭繚瀛樿В鏋? ${fileName}`)
+        console.log(`[AnalysisCache] 已保存解析: ${fileName}`)
         return { success: true, path: filePath }
     } catch (err) { 
-        console.error('[AnalysisCache] 淇濆瓨澶辫触:', err)
+        console.error('[AnalysisCache] 保存失败:', err)
         return { success: false, error: err.message } 
     }
 })
 
-// 鍔犺浇鏈湴缂撳瓨鐨勫湪绾挎瓕鏇茶嫳鏂囪В鏋?
+// 加载本地缓存的在线歌曲英文解析
 ipcMain.handle('load-online-english-analysis', async (_, songId) => {
     try {
         const analysisDir = path.join(app.getPath('userData'), 'analysis_cache')
@@ -580,7 +575,7 @@ ipcMain.handle('load-online-english-analysis', async (_, songId) => {
     }
 })
 
-// 绐楀彛鍏ㄥ睆鎺у埗
+// 窗口全屏控制
 ipcMain.handle('set-window-fullscreen', async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win) {
@@ -599,23 +594,23 @@ ipcMain.handle('exit-window-fullscreen', async () => {
     return { success: false, error: 'No focused window' }
 })
 
-// 鏌ユ壘鏈湴 MV 瑙嗛鏂囦欢
+// 查找本地 MV 视频文件
 ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
     const videoExts = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.wmv']
     const searchDirs = []
 
-    // 1. 姝屾洸鎵€鍦ㄧ洰褰?
+    // 1. 歌曲所在目录
     if (songPath && fs.existsSync(songPath)) {
         const dir = path.dirname(songPath)
         if (!searchDirs.includes(dir)) searchDirs.push(dir)
     }
 
-    // 2. 鐢ㄦ埛閰嶇疆鐨?MV 鐩綍
+    // 2. 用户配置的 MV 目录
     if (mvDir && fs.existsSync(mvDir)) {
         if (!searchDirs.includes(mvDir)) searchDirs.push(mvDir)
     }
 
-    // 3. 姝屾洸鐩綍涓嬬殑 mv 瀛愮洰褰?
+    // 3. 歌曲目录下的 mv 子目录
     if (songPath) {
         const songDir = path.dirname(songPath)
         const subMvDir = path.join(songDir, 'mv')
@@ -624,7 +619,7 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
         }
     }
 
-    // 娓呯悊姝屾洸鍚嶇敤浜庡尮閰嶏細绉婚櫎鎷彿鍐呭銆佺壒娈婂瓧绗?
+    // 清理歌曲名用于匹配：移除括号内容、特殊字符
     const cleanName = (str) => str.replace(/[\\/:*?"<>|]/g, '').trim()
 
     const targetName = cleanName(songName).toLowerCase()
@@ -638,7 +633,7 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
 
                 const fileName = cleanName(path.basename(file, ext)).toLowerCase()
 
-                // 绮剧‘鍖归厤鎴栧寘鍚尮閰?
+                // 精确匹配或包含匹配
                 if (fileName === targetName || fileName.includes(targetName) || targetName.includes(fileName)) {
                     const fullPath = path.join(dir, file)
                     const formattedPath = fullPath.replace(/\\/g, '/')
@@ -652,24 +647,24 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
                 }
             }
         } catch (e) {
-            // 璺宠繃鏃犳硶璁块棶鐨勭洰褰?
+            // 跳过无法访问的目录
         }
     }
 
-    return { success: false, error: '鏈壘鍒板尮閰嶇殑MV瑙嗛鏂囦欢' }
+    return { success: false, error: '未找到匹配的MV视频文件' }
 })
 
-// --- 鑷姩鏇存柊 ---
+// --- 自动更新 ---
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
 
 function checkForUpdates() {
     if (VITE_DEV_SERVER_URL) return
-    // 姣忔鍚姩閮藉己鍒舵鏌ワ紝涓嶄娇鐢ㄧ紦瀛?
+    // 每次启动都强制检查，不使用缓存
     autoUpdater.checkForUpdates().catch(() => {})
 }
 
-// 娓呴櫎鏇存柊缂撳瓨锛岀‘淇濇瘡娆￠兘鐪熸妫€娴?
+// 清除更新缓存，确保每次都真正检测
 try {
     const cacheDir = path.join(app.getPath('userData'), 'Cache')
     if (fs.existsSync(cacheDir)) {
@@ -727,20 +722,20 @@ app.whenReady().then(() => {
         }
     })
 
-    // --- Electron 22 鍏煎鎬у崗璁敞鍐?(Win7 鏀寔) ---
+    // --- Electron 22 兼容性协议注册 (Win7 支持) ---
 
-    // 1. local-file 鍗忚 (鏀寔 Range 璇锋眰)
+    // 1. local-file 协议 (支持 Range 请求)
     protocol.registerStreamProtocol('local-file', (request, callback) => {
         try {
             const urlStr = request.url
-            // 鏀硅繘璺緞瑙ｆ瀽锛氳В鍐冲弻鏂滄潬/涓夋枩鏉犺矾寰勫尮閰嶉棶棰?
+            // 改进路径解析：解决双斜杠/三斜杠路径匹配问题
             let filePath = decodeURIComponent(urlStr.replace('local-file://', ''))
-            // 鍏煎鏈変簺绯荤粺浼犲叆鐨勬槸 /C:/... 鏍煎紡
+            // 兼容有些系统传入的是 /C:/... 格式
             if (process.platform === 'win32' && filePath.startsWith('/')) {
                 filePath = filePath.substring(1)
             }
 
-            // Windows 璺緞瑙勮寖鍖?
+            // Windows 路径规范化
             if (process.platform === 'win32') {
                 filePath = path.normalize(filePath)
             }
@@ -813,7 +808,7 @@ app.whenReady().then(() => {
         }
     })
 
-    // 2. song-cover 鍗忚 (甯﹀厹搴曢€昏緫)
+    // 2. song-cover 协议 (带兜底逻辑)
     protocol.registerBufferProtocol('song-cover', async (request, callback) => {
         try {
             const urlStr = request.url
@@ -826,21 +821,21 @@ app.whenReady().then(() => {
 
             if (!fs.existsSync(filePath)) return callback({ statusCode: 404 })
 
-            // 鎻愬彇鍐呭祵
+            // 提取内嵌
             try {
                 const metadata = await mm.parseFile(filePath)
                 if (metadata.common.picture && metadata.common.picture.length > 0) {
                     const pic = metadata.common.picture[0]
-                    // 濡傛灉瑕佹眰闈欐€佸浘鐗囦笖鍐呭祵鐨勬槸GIF锛屽垯璺宠繃浣跨敤鍏滃簳鍥?
+                    // 如果要求静态图片且内嵌的是GIF，则跳过使用兜底图
                     if (hasStaticParam && pic.format === 'image/gif') {
-                        // 璺宠繃GIF锛岀户缁煡鎵惧叾浠栧浘鐗?
+                        // 跳过GIF，继续查找其他图片
                     } else {
                         return callback({ mimeType: pic.format, data: pic.data })
                     }
                 }
             } catch (e) { }
 
-            // 鎻愬彇鍚岀洰褰曞浘鐗?(gif > png > jpg > webp)
+            // 提取同目录图片 (gif > png > jpg > webp)
             const dir = path.dirname(filePath)
             const baseName = path.basename(filePath, path.extname(filePath))
             const exts = hasStaticParam ? ['.png', '.jpg', '.jpeg', '.webp'] : ['.gif', '.png', '.jpg', '.jpeg', '.webp']
@@ -852,7 +847,7 @@ app.whenReady().then(() => {
                 }
             }
 
-            // 榛樿鍏滃簳鍥?(閫氳繃 axios 璇锋眰)
+            // 默认兜底图 (通过 axios 请求)
             const defaultUrl = 'https://p2.music.126.net/6y-U6QnSjd_5419m1B0R_g==/109951165034938831.jpg'
             const response = await axios.get(defaultUrl, { responseType: 'arraybuffer' })
             callback({ mimeType: 'image/jpeg', data: Buffer.from(response.data) })
@@ -863,7 +858,7 @@ app.whenReady().then(() => {
 
     createWindow()
     createTray()
-    // 鍚姩鍚?5 绉掓娴嬫洿鏂?
+    // 启动后 5 秒检测更新
     setTimeout(checkForUpdates, 5000)
 })
 
@@ -883,7 +878,7 @@ ipcMain.handle('download-song', async (_, { url, name, artist, picUrl }) => {
     try {
         const sanitize = (str) => String(str).replace(/[\\/:*?"<>|]/g, '_').trim()
         const { canceled, filePath } = await dialog.showSaveDialog({
-            title: '閫夋嫨淇濆瓨浣嶇疆',
+            title: '选择保存位置',
             defaultPath: `${sanitize(name)} - ${sanitize(artist)}.mp3`,
             filters: [{ name: 'Audio Files', extensions: ['mp3'] }]
         })
@@ -901,10 +896,10 @@ ipcMain.handle('download-song', async (_, { url, name, artist, picUrl }) => {
 })
 
 ipcMain.on('open-osk', () => {
-    // 閽堝 Win7-Win11 鐨勮櫄鎷熼敭鐩?
+    // 针对 Win7-Win11 的虚拟键盘
     exec('osk.exe', (err) => {
         if (err) {
-            // 濡傛灉鏅€?exec 澶辫触锛屽皾璇曞叏璺緞
+            // 如果普通 exec 失败，尝试全路径
             const fullPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'osk.exe')
             exec(`"${fullPath}"`)
         }
@@ -917,7 +912,7 @@ ipcMain.on('open-external', (_, url) => {
     }
 })
 
-// 鈹€鈹€ 鍏冩暟鎹紪杈?鈹€鈹€
+// ── 元数据编辑 ──
 import NodeID3 from 'node-id3'
 
 async function resizeCover(coverDataUrl) {
@@ -944,7 +939,7 @@ function saveCoverTempFile(coverBuf) {
     return tmpPath
 }
 
-// 鐢?ffmpeg 鍐欏叆鍏冩暟鎹紙鏀寔 FLAC/OGG/WAV/M4A 绛夋墍鏈夋牸寮忥級
+// 用 ffmpeg 写入元数据（支持 FLAC/OGG/WAV/M4A 等所有格式）
 function saveWithFfmpeg(songPath, metadata, coverBuf) {
     return new Promise((resolve, reject) => {
         const tmpOut = songPath + '.tmp'
@@ -969,7 +964,7 @@ function saveWithFfmpeg(songPath, metadata, coverBuf) {
             if (coverFile) { try { fs.unlinkSync(coverFile) } catch(e) {} }
             if (err) { 
                 try { if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut) } catch(e) {}
-                reject(new Error('ffmpeg鍐欏叆澶辫触: ' + err.message))
+                reject(new Error('ffmpeg写入失败: ' + err.message))
                 return
             }
             try {
@@ -977,13 +972,13 @@ function saveWithFfmpeg(songPath, metadata, coverBuf) {
                 fs.unlinkSync(tmpOut)
                 resolve()
             } catch (e) {
-                reject(new Error('鏇挎崲鏂囦欢澶辫触: ' + e.message))
+                reject(new Error('替换文件失败: ' + e.message))
             }
         })
     })
 }
 
-// MP3 鍐欏叆 (NodeID3锛屼笉闇€瑕?ffmpeg)
+// MP3 写入 (NodeID3，不需要 ffmpeg)
 function saveMP3Metadata(songPath, metadata, coverBuf) {
     const tags = {
         title: metadata.title || '', artist: metadata.artist || '',
@@ -992,7 +987,7 @@ function saveMP3Metadata(songPath, metadata, coverBuf) {
     }
     if (coverBuf) tags.image = { mime: 'image/jpeg', type: { id: 3, name: 'front cover' }, description: 'Cover', imageBuffer: coverBuf }
     const success = NodeID3.write(tags, songPath)
-    if (!success) throw new Error('ID3鍐欏叆澶辫触')
+    if (!success) throw new Error('ID3写入失败')
 }
 
 ipcMain.handle('read-song-metadata', async (_, songPath) => {
@@ -1009,7 +1004,7 @@ ipcMain.handle('read-song-metadata', async (_, songPath) => {
             hasCover: !!(metadata.common.picture?.length),
             format: ext.replace('.', '').toUpperCase()
         }
-        // 鎻愬彇灏侀潰 base64
+        // 提取封面 base64
         if (metadata.common.picture?.length) {
             const pic = metadata.common.picture[0]
             const base64 = Buffer.from(pic.data).toString('base64')
@@ -1024,10 +1019,10 @@ ipcMain.handle('save-song-metadata', async (_, { songPath, metadata, coverDataUr
         const ext = path.extname(songPath).toLowerCase()
         const isMP3 = ext === '.mp3'
         if (!isMP3 && !['.flac', '.ogg', '.oga', '.wav', '.m4a', '.mp4', '.aac', '.wma'].includes(ext)) {
-            return { success: false, error: `鏆備笉鏀寔 ${ext} 鏍煎紡鐨勫厓鏁版嵁鍐欏叆锛堟敮鎸?MP3/FLAC/OGG/WAV/M4A 绛夛級` }
+            return { success: false, error: `暂不支持 ${ext} 格式的元数据写入（支持 MP3/FLAC/OGG/WAV/M4A 等）` }
         }
 
-        // 澶囦唤鍘熸枃浠?
+        // 备份原文件
         const backupPath = songPath + '.bak'
         fs.copyFileSync(songPath, backupPath)
 
@@ -1039,9 +1034,9 @@ ipcMain.handle('save-song-metadata', async (_, { songPath, metadata, coverDataUr
                 await saveWithFfmpeg(songPath, metadata, coverBuf)
             }
 
-            // 楠岃瘉鍐欏叆鍚庢枃浠舵槸鍚﹀彲璇?
+            // 验证写入后文件是否可读
             const stat = fs.statSync(songPath)
-            if (stat.size < 1024) throw new Error('鍐欏叆鍚庢枃浠跺紓甯稿皬锛屽彲鑳藉凡鎹熷潖')
+            if (stat.size < 1024) throw new Error('写入后文件异常小，可能已损坏')
 
             fs.unlinkSync(backupPath)
             return { success: true }
@@ -1055,37 +1050,37 @@ ipcMain.handle('save-song-metadata', async (_, { songPath, metadata, coverDataUr
     } catch (err) { return { success: false, error: err.message } }
 })
 
-// 涓嬭浇灏侀潰鍥剧墖鍒版湰鍦版瓕鏇插悓鐩綍
+// 下载封面图片到本地歌曲同目录
 ipcMain.handle('download-cover-for-song', async (_, { songPath, coverUrl }) => {
     try {
-        if (!coverUrl || !songPath) return { success: false, error: '鍙傛暟涓嶅叏' }
+        if (!coverUrl || !songPath) return { success: false, error: '参数不全' }
         const response = await axios.get(coverUrl, { responseType: 'arraybuffer', timeout: 15000 })
         const songDir = path.dirname(songPath)
         const songBase = path.basename(songPath, path.extname(songPath))
         const coverPath = path.join(songDir, songBase + '.jpg')
         fs.writeFileSync(coverPath, Buffer.from(response.data))
-        console.log('[Cover] 灏侀潰宸蹭繚瀛?', coverPath)
+        console.log('[Cover] 封面已保存:', coverPath)
         return { success: true, coverPath }
     } catch (err) {
-        console.error('[Cover] 涓嬭浇灏侀潰澶辫触:', err.message)
+        console.error('[Cover] 下载封面失败:', err.message)
         return { success: false, error: err.message }
     }
 })
 
-// 鎵撳紑鏂囦欢鎵€鍦ㄦ枃浠跺す
+// 打开文件所在文件夹
 ipcMain.handle('show-item-in-folder', async (_, filePath) => {
     try {
         if (fs.existsSync(filePath)) {
             shell.showItemInFolder(filePath)
             return { success: true }
         } else {
-            // 濡傛灉鏂囦欢涓嶅瓨鍦紝灏濊瘯鎵撳紑鐖舵枃浠跺す
+            // 如果文件不存在，尝试打开父文件夹
             const dir = path.dirname(filePath)
             if (fs.existsSync(dir)) {
                 shell.openPath(dir)
                 return { success: true }
             }
-            return { success: false, error: '璺緞涓嶅瓨鍦? }
+            return { success: false, error: '路径不存在' }
         }
     } catch (err) {
         return { success: false, error: err.message }
@@ -1100,4 +1095,3 @@ app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else win?.show()
 })
-

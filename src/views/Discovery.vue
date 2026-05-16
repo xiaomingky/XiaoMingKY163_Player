@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   getBanner, 
@@ -19,6 +19,13 @@ const playerStore = usePlayerStore()
 const userStore = useUserStore()
 
 const banners = ref([])
+const currentBanner = ref(0)
+let bannerTimer = null
+const startBannerAuto = () => { if (banners.value.length > 1) bannerTimer = setInterval(() => { currentBanner.value = (currentBanner.value + 1) % banners.value.length }, 4000) }
+const stopBannerAuto = () => { clearInterval(bannerTimer); bannerTimer = null }
+const prevBanner = () => { currentBanner.value = (currentBanner.value - 1 + banners.value.length) % banners.value.length }
+const nextBanner = () => { currentBanner.value = (currentBanner.value + 1) % banners.value.length }
+
 const playlists = ref([])
 const newSongs = ref([])
 const rankLists = ref([])
@@ -33,6 +40,7 @@ const fetchData = async (forceRefresh = false) => {
     if (forceRefresh || banners.value.length === 0) {
       const bannerRes = await getBanner()
       banners.value = bannerRes?.banners || []
+      if (banners.value.length > 0) startBannerAuto()
     }
 
     if (activeTab.value === 'recommend') {
@@ -102,6 +110,7 @@ watch(() => userStore.playlistChanged, () => {
 onMounted(() => {
   fetchData()
 })
+onUnmounted(() => { clearInterval(bannerTimer) })
 </script>
 
 <template>
@@ -125,13 +134,19 @@ onMounted(() => {
          加载中...
       </div>
 
-      <!-- Banner - always show if we have them -->
+      <!-- Banner Carousel -->
       <section v-if="activeTab === 'recommend'" class="banner-section">
-        <div class="banner-container">
-          <img v-if="banners.length > 0" :src="banners[0].imageUrl" alt="Banner" class="banner-img" />
-          <img v-else src="https://p1.music.126.net/6y-U6QnSjd_5419m1B0R_g==/109951165034938831.jpg" alt="Banner" class="banner-img" />
-          <div class="banner-dots">
-            <span v-for="(b, index) in banners" :key="index" class="dot" :class="{ active: index === 0 }"></span>
+        <div class="banner-container" @mouseenter="stopBannerAuto" @mouseleave="startBannerAuto">
+          <Transition name="banner-fade" mode="out-in">
+            <img v-if="banners.length > 0" :key="currentBanner" :src="banners[currentBanner].imageUrl" alt="Banner" class="banner-img" />
+            <img v-else key="fallback" src="https://p1.music.126.net/6y-U6QnSjd_5419m1B0R_g==/109951165034938831.jpg" alt="Banner" class="banner-img" />
+          </Transition>
+          <div v-if="banners.length > 1" class="banner-arrows">
+            <div class="banner-arrow left" @click="prevBanner"><ChevronLeft :size="24" /></div>
+            <div class="banner-arrow right" @click="nextBanner"><ChevronRight :size="24" /></div>
+          </div>
+          <div class="banner-dots" v-if="banners.length > 1">
+            <span v-for="(b, index) in banners" :key="index" class="dot" :class="{ active: index === currentBanner }" @click="currentBanner = index"></span>
           </div>
         </div>
       </section>
@@ -382,11 +397,12 @@ onMounted(() => {
 
 .banner-dots {
   position: absolute;
-  bottom: 10px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 8px;
+  z-index: 2;
 }
 
 .dot {
@@ -394,13 +410,48 @@ onMounted(() => {
   height: 6px;
   border-radius: 50%;
   background-color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  transition: all 0.3s;
 }
+.dot:hover { background-color: rgba(255,255,255,0.8); }
 
 .dot.active {
   background-color: var(--primary-color);
-  width: 12px;
+  width: 16px;
   border-radius: 3px;
 }
+
+.banner-arrows {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+.banner-arrow {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.banner-container:hover .banner-arrow { opacity: 1; }
+.banner-arrow:hover { background: rgba(0,0,0,0.6); }
+
+.banner-fade-enter-active, .banner-fade-leave-active { transition: opacity 0.4s ease; }
+.banner-fade-enter-from, .banner-fade-leave-to { opacity: 0; }
 
 .section-title {
   font-size: 18px;

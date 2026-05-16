@@ -6,6 +6,7 @@ import { Readable } from 'node:stream'
 import * as mm from 'music-metadata'
 import axios from 'axios'
 import { exec, execFile } from 'node:child_process'
+import { autoUpdater } from 'electron-updater'
 
 // --- Win7 兼容性初始化 ---
 if (process.platform === 'win32') {
@@ -653,6 +654,43 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
     return { success: false, error: '未找到匹配的MV视频文件' }
 })
 
+// --- 自动更新 ---
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+function checkForUpdates() {
+    if (VITE_DEV_SERVER_URL) return
+    autoUpdater.checkForUpdates().catch(() => {})
+}
+
+autoUpdater.on('update-available', (info) => {
+    win?.webContents.send('update-available', info.version)
+})
+
+autoUpdater.on('update-not-available', () => {
+    win?.webContents.send('update-not-available')
+})
+
+autoUpdater.on('download-progress', (progress) => {
+    win?.webContents.send('update-download-progress', progress.percent)
+})
+
+autoUpdater.on('update-downloaded', () => {
+    win?.webContents.send('update-downloaded')
+})
+
+ipcMain.handle('check-for-updates', () => {
+    return autoUpdater.checkForUpdates().then(r => ({ version: r?.updateInfo?.version })).catch(() => null)
+})
+
+ipcMain.on('start-download-update', () => {
+    autoUpdater.downloadUpdate().catch(() => {})
+})
+
+ipcMain.on('install-update', () => {
+    autoUpdater.quitAndInstall()
+})
+
 app.whenReady().then(() => {
     // Grant media permissions for audio device enumeration
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -799,6 +837,8 @@ app.whenReady().then(() => {
 
     createWindow()
     createTray()
+    // 启动后 5 秒检测更新
+    setTimeout(checkForUpdates, 5000)
 })
 
 ipcMain.on('window-minimize-to-tray', () => {

@@ -54,6 +54,16 @@ const newPlaylistName = ref('')
 const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
 
+// 自动更新检测
+const updateInfo = ref({ available: false, version: '', downloading: false, downloaded: false, progress: 0 })
+const startDownloadUpdate = () => {
+    updateInfo.value.downloading = true
+    const b = getBridge(); if (b?.send) b.send('start-download-update')
+}
+const installUpdate = () => {
+    const b = getBridge(); if (b?.send) b.send('install-update')
+}
+
 const getFooterCoverUrl = () => {
     const picUrl = playerStore.currentSong.al?.picUrl || ''
     if (!picUrl) return ''
@@ -146,6 +156,12 @@ onMounted(() => {
     b.on('request-lyric-sync', () => {
         playerStore.updateDesktopLyricsState()
     })
+
+    // 更新检测事件
+    b.on('update-available', (_, version) => { updateInfo.value = { ...updateInfo.value, available: true, version } })
+    b.on('update-not-available', () => { updateInfo.value.available = false })
+    b.on('update-download-progress', (_, pct) => { updateInfo.value.progress = pct })
+    b.on('update-downloaded', () => { updateInfo.value = { ...updateInfo.value, downloading: false, downloaded: true } })
 
     // 初始化桌面歌词窗口状态
     if (playerStore.showDesktopLyrics) {
@@ -369,6 +385,14 @@ const openAuthorLink = () => {
     <Toast />
     
     <div v-if="route.path !== '/desktop-lyrics'" class="normal-layout-wrapper">
+      <!-- 更新提示条 -->
+      <div v-if="updateInfo.available" class="update-bar">
+        <span class="update-text">🎉 发现新版本 v{{ updateInfo.version }}，</span>
+        <button v-if="!updateInfo.downloading && !updateInfo.downloaded" class="update-btn" @click="startDownloadUpdate">立即更新</button>
+        <span v-if="updateInfo.downloading" class="update-progress">下载中 {{ Math.round(updateInfo.progress) }}%</span>
+        <button v-if="updateInfo.downloaded" class="update-btn ready" @click="installUpdate">点击安装并重启</button>
+        <X :size="14" class="update-close" @click="updateInfo.available = false" />
+      </div>
       <SongDetail />
       <LoginModal :show="showLogin" @close="showLogin = false" />
       <MvPlayer />
@@ -738,6 +762,42 @@ const openAuthorLink = () => {
     flex: 1;
     height: 100%;
 }
+
+/* 更新提示条 */
+.update-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    padding: 6px 16px;
+    font-size: 13px;
+    flex-shrink: 0;
+    z-index: 5001;
+    position: relative;
+}
+.update-btn {
+    background: #fff;
+    color: #4f46e5;
+    border: none;
+    padding: 3px 14px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.update-btn:hover { background: #eef2ff; }
+.update-btn.ready { background: #fbbf24; color: #78350f; }
+.update-progress { font-size: 12px; opacity: 0.9; }
+.update-close {
+    position: absolute;
+    right: 12px;
+    cursor: pointer;
+    opacity: 0.6;
+}
+.update-close:hover { opacity: 1; }
 
 /* App Specific Layout Fixes */
 .header {

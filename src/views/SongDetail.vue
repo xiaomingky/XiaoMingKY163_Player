@@ -303,10 +303,9 @@ onMounted(() => {
 
 <template>
   <div class="song-detail-overlay" :class="{ show: playerStore.showSongDetail }">
-    <!-- 拖动条：红圈位置，整个顶部窄条可拖动 -->
-    <div class="drag-bar" style="-webkit-app-region: drag;"></div>
-    <div class="header no-drag">
-      <ChevronDown class="close-btn" :size="30" @mousedown.stop @click.stop="playerStore.showSongDetail = false" />
+    <!-- 顶部拖动区域：整个 header 可拖，只有关闭按钮不可拖 -->
+    <div class="header drag-header">
+      <ChevronDown class="close-btn no-drag" :size="30" @mousedown.stop @click.stop="playerStore.showSongDetail = false" />
     </div>
 
     <div class="main-content" :class="{ 'analysis-active': showEnglishAnalysis }">
@@ -532,22 +531,15 @@ onMounted(() => {
   transform: translate3d(0, 0, 0);
 }
 
-/* 拖动条：顶部窄条，可拖动程序 */
-.drag-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
-  z-index: 2;
-}
-
 .header {
   position: relative;
-  z-index: 1; /* 确保内容在模糊层之上 */
+  z-index: 1;
   padding: 15px 30px;
   flex-shrink: 0;
   background-color: transparent !important;
+}
+.drag-header {
+  -webkit-app-region: drag;
 }
 
 .close-btn {

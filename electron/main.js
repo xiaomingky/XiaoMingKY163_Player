@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
+﻿import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
@@ -6,7 +6,7 @@ import { Readable } from 'node:stream'
 import * as mm from 'music-metadata'
 import axios from 'axios'
 import { exec, execFile } from 'node:child_process'
-import { autoUpdater } from 'electron-updater'
+import https from 'node:https'
 
 // --- Win7 兼容性初始化 ---
 if (process.platform === 'win32') {
@@ -654,62 +654,34 @@ ipcMain.handle('find-local-mv', async (_, { songName, songPath, mvDir }) => {
     return { success: false, error: '未找到匹配的MV视频文件' }
 })
 
-// --- 自动更新 ---
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
-
+// --- 自动更新（GitHub API 直连）---
 function checkForUpdates() {
-    if (VITE_DEV_SERVER_URL) return
-    // 每次启动都强制检查，不使用缓存
-    autoUpdater.checkForUpdates().catch(() => {})
+    const opts = {
+        hostname: 'api.github.com',
+        path: '/repos/xiaomingky/XiaoMingKY163_Player/releases/latest',
+        headers: { 'User-Agent': 'MingYunTime', 'Accept': 'application/vnd.github+json' }
+    }
+    https.get(opts, (res) => {
+        let body = ''
+        res.on('data', d => body += d)
+        res.on('end', () => {
+            try {
+                const release = JSON.parse(body)
+                const latestVersion = (release.tag_name || '').replace('v', '')
+                const currentVersion = app.getVersion()
+                const notes = release.body || ''
+                if (latestVersion && latestVersion !== currentVersion) {
+                    win?.webContents.send('update-available', 'v' + latestVersion, notes)
+                } else {
+                    win?.webContents.send('update-not-available', currentVersion)
+                }
+            } catch(_) {}
+        })
+    }).on('error', () => {})
 }
 
-// 清除更新缓存，确保每次都真正检测
-try {
-    const cacheDir = path.join(app.getPath('userData'), 'Cache')
-    if (fs.existsSync(cacheDir)) {
-        const files = fs.readdirSync(cacheDir)
-        for (const f of files) {
-            if (f.includes('update') || f.includes('electron-updater') || f.includes('github')) {
-                const p = path.join(cacheDir, f)
-                try { fs.rmSync(p, { recursive: true }) } catch (_) {}
-            }
-        }
-    }
-} catch (_) {}
-
-autoUpdater.on('update-available', (info) => {
-    let notes = ''
-    if (typeof info.releaseNotes === 'string') {
-        notes = info.releaseNotes
-    } else if (Array.isArray(info.releaseNotes)) {
-        notes = info.releaseNotes.map(n => n.note || '').join('\n')
-    }
-    win?.webContents.send('update-available', info.version, notes)
-})
-
-autoUpdater.on('update-not-available', () => {
-    win?.webContents.send('update-not-available')
-})
-
-autoUpdater.on('download-progress', (progress) => {
-    win?.webContents.send('update-download-progress', progress.percent)
-})
-
-autoUpdater.on('update-downloaded', () => {
-    win?.webContents.send('update-downloaded')
-})
-
-ipcMain.handle('check-for-updates', () => {
-    return autoUpdater.checkForUpdates().then(r => ({ version: r?.updateInfo?.version })).catch(() => null)
-})
-
 ipcMain.on('start-download-update', () => {
-    autoUpdater.downloadUpdate().catch(() => {})
-})
-
-ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall()
+    shell.openExternal('https://github.com/xiaomingky/XiaoMingKY163_Player/releases/latest')
 })
 
 app.whenReady().then(() => {

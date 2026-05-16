@@ -56,13 +56,9 @@ const showQualityMenu = ref(false)
 const showDeviceMenu = ref(false)
 
 // 自动更新检测
-const updateInfo = ref({ available: false, version: '', notes: '', downloading: false, downloaded: false, progress: 0 })
+const updateInfo = ref({ available: false, checked: false, version: '', notes: '', showNotes: false })
 const startDownloadUpdate = () => {
-    updateInfo.value.downloading = true
     const b = getBridge(); if (b?.send) b.send('start-download-update')
-}
-const installUpdate = () => {
-    const b = getBridge(); if (b?.send) b.send('install-update')
 }
 
 const getFooterCoverUrl = () => {
@@ -159,8 +155,8 @@ onMounted(() => {
     })
 
     // 更新检测事件
-    b.on('update-available', (_, version, notes) => { updateInfo.value = { ...updateInfo.value, available: true, version, notes: notes || '' } })
-    b.on('update-not-available', () => { updateInfo.value.available = false })
+    b.on('update-available', (_, version, notes) => { updateInfo.value = { ...updateInfo.value, available: true, checked: true, version, notes: notes || '' } })
+    b.on('update-not-available', (_, currentVersion) => { updateInfo.value = { ...updateInfo.value, available: false, checked: true, version: currentVersion || '', notes: '' } })
     b.on('update-download-progress', (_, pct) => { updateInfo.value.progress = pct })
     b.on('update-downloaded', () => { updateInfo.value = { ...updateInfo.value, downloading: false, downloaded: true } })
 
@@ -388,16 +384,19 @@ const openAuthorLink = () => {
 
     <div v-if="route.path !== '/desktop-lyrics'" class="normal-layout-wrapper">
       <!-- 更新提示条 -->
-      <div v-if="updateInfo.available" class="update-bar">
-        <span class="update-text">🎉 发现新版本 v{{ updateInfo.version }}，</span>
-        <button v-if="!updateInfo.downloading && !updateInfo.downloaded" class="update-btn" @click="startDownloadUpdate">立即更新</button>
-        <span v-if="updateInfo.downloading" class="update-progress">下载中 {{ Math.round(updateInfo.progress) }}%</span>
-        <button v-if="updateInfo.downloaded" class="update-btn ready" @click="installUpdate">点击安装并重启</button>
-        <span v-if="updateInfo.notes" class="update-notes-toggle" @click="updateInfo.showNotes = !updateInfo.showNotes">
-          {{ updateInfo.showNotes ? '收起' : '查看更新内容' }}
-        </span>
-        <X :size="14" class="update-close" @click="updateInfo.available = false" />
-        <div v-if="updateInfo.showNotes && updateInfo.notes" class="update-notes" v-html="updateInfo.notes.replace(/\n/g, '<br>')"></div>
+      <div v-if="updateInfo.available || updateInfo.checked" class="update-bar" :class="{ uptodate: !updateInfo.available }">
+        <template v-if="updateInfo.available">
+          <span class="update-text">🎉 发现新版本 {{ updateInfo.version }}，</span>
+          <button class="update-btn" @click="startDownloadUpdate">立即下载</button>
+          <span v-if="updateInfo.notes" class="update-notes-toggle" @click="updateInfo.showNotes = !updateInfo.showNotes">
+            {{ updateInfo.showNotes ? '收起' : '查看更新内容' }}
+          </span>
+          <div v-if="updateInfo.showNotes && updateInfo.notes" class="update-notes" v-html="updateInfo.notes.replace(/\n/g, '<br>')"></div>
+        </template>
+        <template v-else>
+          <span class="update-text">✅ 已是最新版本 {{ updateInfo.version ? 'v' + updateInfo.version : '' }}</span>
+        </template>
+        <X :size="14" class="update-close" @click="updateInfo.available = false; updateInfo.checked = false" />
       </div>
       <SongDetail />
       <LoginModal :show="showLogin" @close="showLogin = false" />
@@ -783,6 +782,9 @@ const openAuthorLink = () => {
     z-index: 5001;
     position: relative;
 }
+.update-bar.uptodate {
+    background: linear-gradient(135deg, #059669, #047857);
+}
 .update-btn {
     background: #fff;
     color: #4f46e5;
@@ -795,8 +797,6 @@ const openAuthorLink = () => {
     transition: all 0.2s;
 }
 .update-btn:hover { background: #eef2ff; }
-.update-btn.ready { background: #fbbf24; color: #78350f; }
-.update-progress { font-size: 12px; opacity: 0.9; }
 .update-close {
     position: absolute;
     right: 12px;

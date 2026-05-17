@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlayerStore } from './store/player'
 import { useUserStore } from './store/user'
@@ -111,6 +111,17 @@ const getBridge = () => {
   }
   return b
 }
+
+// 自动监听播放状态改变并广播给桌面歌词窗口
+watch(
+    [() => playerStore.isPlaying, () => playerStore.currentSong, () => playerStore.lyrics, () => playerStore.yrcLyrics],
+    () => {
+        if (playerStore.showDesktopLyrics) {
+            playerStore.updateDesktopLyricsState()
+        }
+    },
+    { deep: true }
+)
 
 onMounted(() => {
   playerStore.initAudio()
@@ -334,7 +345,6 @@ const stopDragVolume = () => {
 }
 
 // 动态切换根节点类名，彻底解决全透明问题
-import { watch } from 'vue'
 watch(() => route.path, (newPath) => {
     if (newPath === '/desktop-lyrics') {
         document.documentElement.classList.add('is-lyrics-window')
@@ -616,7 +626,7 @@ const openGithub = () => {
       </div>
     </div>
 
-    <footer class="footer">
+    <footer class="footer" :class="{ 'is-transparent': playerStore.showSongDetail && playerStore.bgMode === 'cover' }">
       <div class="song-info" @click="toggleSongDetailOverlay">
         <img :src="getFooterCoverUrl()" class="song-cover" />
         <div class="song-detail">

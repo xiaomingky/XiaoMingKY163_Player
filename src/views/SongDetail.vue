@@ -46,12 +46,17 @@ const rhythmBars = ref(Array.from({ length: 48 }, () => ({
   opacity: 0.5
 })))
 
-const getLineDuration = (index) => {
-    if (index >= playerStore.lyrics.length - 1) return 5000 // Default for last line
-    return playerStore.lyrics[index + 1].time - playerStore.lyrics[index].time
-}
+// === 逐词歌词 (YRC) 支持 ===
+const hasYrcLyrics = computed(() => !!playerStore.yrcLyrics && playerStore.yrcLyrics.length > 0)
+
+// 显示用的歌词列表：优先 yrc，否则普通 lyrics
+const displayLyrics = computed(() => {
+    if (hasYrcLyrics.value) return playerStore.yrcLyrics
+    return playerStore.lyrics
+})
 
 const getLineProgress = (index) => {
+    if (hasYrcLyrics.value) return 0 // yrc 模式下不使用行级进度
     if (index !== currentLyricIndex.value) return 0
     const line = playerStore.lyrics[index]
     const nextLine = playerStore.lyrics[index + 1]
@@ -64,11 +69,38 @@ const getLineProgress = (index) => {
 
 let animationId = null
 let frameCount = 0
+
+// 逐词动画：直接操作 DOM 的 CSS 自定义属性，绕过 Vue 响应式，保持 60fps 丝滑
+const updateYrcWordProgress = () => {
+    if (!hasYrcLyrics.value || !lyricContainer.value) return
+    const nowMs = (playerStore.audio?.currentTime ?? playerStore.currentTime) * 1000
+    const wordSpans = lyricContainer.value.querySelectorAll('.yrc-word')
+    for (let i = 0; i < wordSpans.length; i++) {
+        const el = wordSpans[i]
+        const ws = parseFloat(el.dataset.ws) // word startTime ms
+        const wd = parseFloat(el.dataset.wd) // word duration ms
+        if (isNaN(ws) || isNaN(wd)) continue
+        let progress = 0
+        if (nowMs >= ws + wd) {
+            progress = 1
+        } else if (nowMs > ws && wd > 0) {
+            progress = (nowMs - ws) / wd
+        }
+        el.style.setProperty('--wp', progress)
+    }
+}
+
 const updateVisualizer = () => {
   if (!playerStore.showSongDetail) {
     animationId = requestAnimationFrame(updateVisualizer)
     return
   }
+  
+  // 逐词歌词动画更新（每帧）
+  if (hasYrcLyrics.value && playerStore.isPlaying) {
+      updateYrcWordProgress()
+  }
+  
   if (playerStore.isPlaying) {
     frameCount++
     if (frameCount % 2 === 0) {
@@ -91,6 +123,8 @@ const updateVisualizer = () => {
           bar.height = Math.max(4, bar.height * 0.8)
           bar.opacity = Math.max(0.3, bar.opacity * 0.8)
       })
+      // 暂停时也刷新一次 yrc 进度（停在当前位置）
+      if (hasYrcLyrics.value) updateYrcWordProgress()
   }
   animationId = requestAnimationFrame(updateVisualizer)
 }
@@ -104,14 +138,15 @@ onUnmounted(() => {
 })
 
 const currentLyricIndex = computed(() => {
-  if (!playerStore.lyrics.length) return -1
+  const lrc = displayLyrics.value
+  if (!lrc || !lrc.length) return -1
   const time = playerStore.currentTime + 0.2
-  for (let i = 0; i < playerStore.lyrics.length; i++) {
-    if (time < playerStore.lyrics[i].time) {
+  for (let i = 0; i < lrc.length; i++) {
+    if (time < lrc[i].time) {
       return i - 1
     }
   }
-  return playerStore.lyrics.length - 1
+  return lrc.length - 1
 })
 
 const lyricContainer = ref(null)
@@ -302,7 +337,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="song-detail-overlay" :class="{ show: playerStore.showSongDetail }">
+  <div class="song-detail-overlay" :class="{ show: playerStore.showSongDetail, 'is-cover-mode': playerStore.bgMode === 'cover' }">
+    <div class="bg-blur" v-show="playerStore.bgMode === 'cover'" :style="{ backgroundImage: `url(${getCoverUrl()})` }"></div>
+    
     <!-- 顶部拖动区域：整个 header 可拖，只有关闭按钮不可拖 -->
     <div class="header drag-header">
       <ChevronDown class="close-btn no-drag" :size="30" @mousedown.stop @click.stop="playerStore.showSongDetail = false" />
@@ -400,6 +437,10 @@ onMounted(() => {
                 <div class="action-item en-btn" :class="{ active: showEnglishAnalysis }" title="英文解析" @click="toggleEnglishAnalysis">
                    <BookOpen :size="18" />
                 </div>
+                <div class="action-item" :class="{ active: playerStore.bgMode === 'cover' }" :title="playerStore.bgMode === 'cover' ? '切换到经典样式' : '切换到沉浸模式'" @click="playerStore.toggleBgMode()">
+                   <ImagePlay v-if="playerStore.bgMode === 'cover'" :size="18" />
+                   <Image v-else :size="18" />
+                </div>
             </div>
             <div class="group">
                 <span class="label">桌面字体</span>
@@ -425,17 +466,30 @@ onMounted(() => {
         <!-- The ref must be on the container that has overflow-y: auto -->
         <div class="lyric-wrapper" ref="lyricContainer">
           <div 
-            v-for="(line, index) in playerStore.lyrics" 
+            v-for="(line, index) in displayLyrics" 
             :key="index" 
             class="lyric-line"
-            :class="{ active: index === currentLyricIndex }"
+            :class="{ active: index === currentLyricIndex, 'yrc-line': hasYrcLyrics }"
             :style="{ 
                 fontSize: (index === currentLyricIndex ? lyricFontSize + 4 : lyricFontSize) + 'px',
                 fontFamily: playerStore.desktopLyricFont ? `'${playerStore.desktopLyricFont}', sans-serif` : 'inherit'
             }"
             @click="handleLyricClick(line.time)"
           >
+            <!-- 逐词歌词模式 -->
+            <div v-if="hasYrcLyrics && line.words" class="main-text yrc-text">
+                <span 
+                    v-for="(word, wi) in line.words" 
+                    :key="wi"
+                    class="yrc-word"
+                    :data-ws="word.startTime"
+                    :data-wd="word.duration"
+                    style="--wp: 0"
+                >{{ word.text }}</span>
+            </div>
+            <!-- 普通歌词模式 -->
             <div 
+                v-else
                 class="main-text" 
                 :style="{ '--progress': index === currentLyricIndex ? getLineProgress(index) + '%' : '0%' }"
             >
@@ -443,7 +497,7 @@ onMounted(() => {
             </div>
             <div v-if="line.ttext" class="trans-text">{{ line.ttext }}</div>
           </div>
-          <div v-if="!playerStore.lyrics.length" class="no-lyric">纯音乐，请欣赏</div>
+          <div v-if="!displayLyrics.length" class="no-lyric">纯音乐，请欣赏</div>
           <!-- Spacer for bottom centering -->
           <div class="lyric-spacer"></div>
         </div>
@@ -490,8 +544,6 @@ onMounted(() => {
             }"
         ></div>
     </div>
-
-    <div class="bg-blur" :style="{ backgroundImage: `url(${playerStore.currentSong.al.picUrl})` }"></div>
   </div>
 </template>
 
@@ -501,7 +553,8 @@ onMounted(() => {
   top: 100%;
   left: 0;
   width: 100%;
-  height: calc(100% - var(--footer-height));
+  height: 100%; /* 占满全屏，延伸到footer下方 */
+  padding-bottom: var(--footer-height); /* 防止内容被footer挡住 */
   background-color: #fff;
   z-index: 1000;
   transition: top 0.4s cubic-bezier(0.2, 0, 0.2, 1);
@@ -519,16 +572,17 @@ onMounted(() => {
 
 .bg-blur {
   position: absolute;
-  top: -10%;
-  left: -10%;
-  width: 120%;
-  height: 120%;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(80px) brightness(0.95);
-  opacity: 0.15; /* 彻底还原：极低透明度，确保底色始终是白色 */
-  z-index: -1;
-  transform: translate3d(0, 0, 0);
+  filter: blur(40px) saturate(1.5); /* 降低blur提升老设备性能，增加饱和度让背景颜色跟随封面更明显 */
+  opacity: 0.35; /* 增加透明度让白色底色透出，形成柔和浅色背景，保证黑色文字可读性 */
+  z-index: -1; /* 必须是负数，否则会遮挡上方内容的点击事件 */
+  transform: scale(1.5) translateZ(0); /* 开启硬件加速，加大缩放比例防止边缘漏底 */
+  will-change: transform;
 }
 
 .header {
@@ -921,11 +975,40 @@ onMounted(() => {
   white-space: normal;
   padding: 15px 8px;
   width: 100%;
-  transition: opacity 0.3s, transform 0.3s;
+  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
   cursor: pointer;
   text-align: center;
   color: rgba(0,0,0,0.4);
   box-sizing: border-box;
+  transform-origin: center center;
+}
+
+.is-cover-mode .lyric-line {
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.lyric-line:hover {
+    color: #000;
+}
+
+.lyric-line.active {
+  color: #000 !important;
+  font-weight: 700;
+  transform: scale(1.05); /* 稍微降低缩放防止边缘模糊 */
+}
+
+.lyric-line.active .main-text {
+     background: linear-gradient(to right, #000 var(--progress), rgba(0,0,0,0.15) var(--progress));
+     -webkit-background-clip: text;
+     background-clip: text;
+     -webkit-text-fill-color: transparent;
+}
+
+.is-cover-mode .lyric-line.active .main-text {
+     background: linear-gradient(to right, #000 var(--progress), rgba(0,0,0,0.3) var(--progress));
+     -webkit-background-clip: text;
+     background-clip: text;
+     -webkit-text-fill-color: transparent;
 }
 
 .no-lyric {
@@ -952,23 +1035,6 @@ onMounted(() => {
   white-space: normal;
 }
 
-.lyric-line:hover {
-    color: #000;
-}
-
-.lyric-line.active {
-  color: #000 !important;
-  font-weight: 700;
-  transform: scale(1.05); /* 稍微降低缩放防止边缘模糊 */
-}
-
-.lyric-line.active .main-text {
-     background: linear-gradient(to right, #000 var(--progress), rgba(0,0,0,0.15) var(--progress));
-     -webkit-background-clip: text;
-     background-clip: text;
-     -webkit-text-fill-color: transparent;
-}
-
 .trans-text {
     font-size: 0.85em;
     margin-top: 6px;
@@ -976,6 +1042,56 @@ onMounted(() => {
     font-weight: 400;
     line-height: 1.4;
     color: rgba(0,0,0,0.6);
+}
+
+/* === 逐词歌词 (YRC) Apple Music 风格 === */
+.yrc-line {
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.yrc-line:not(.active) {
+    opacity: 0.5;
+}
+
+.yrc-text {
+    display: inline;
+    line-height: 1.7;
+}
+
+.yrc-word {
+    --wp: 0;
+    display: inline-block;
+    white-space: pre;
+    color: transparent;
+    background: linear-gradient(to right, #000 calc(var(--wp) * 100%), rgba(0,0,0,0.25) calc(var(--wp) * 100%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    will-change: background;
+}
+
+.is-cover-mode .yrc-word {
+    background: linear-gradient(to right, #000 calc(var(--wp) * 100%), rgba(0,0,0,0.4) calc(var(--wp) * 100%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.lyric-line.active .yrc-word {
+    background: linear-gradient(
+        to right,
+        #000 calc(var(--wp) * 100%),
+        rgba(0,0,0,0.15) calc(var(--wp) * 100%)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.lyric-line:not(.active) .yrc-word {
+    background: none;
+    -webkit-text-fill-color: rgba(0,0,0,0.4);
 }
 
 /* Comment Styles */

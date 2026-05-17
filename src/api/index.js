@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const request = axios.create({
-    baseURL: 'https://your-netease-api-server.com',  // 请替换为你的网易云 API 服务地址
+    baseURL: 'https://api.xiaomingky.cn',
     timeout: 30000,
     withCredentials: true
 })
@@ -52,6 +52,7 @@ export const getNewSongs = (limit = 12) => request.get(`/personalized/newsong?li
 export const getSongUrl = (id, level = 'standard') => request.get(`/song/url/v1?id=${id}&level=${level}`)
 export const getSongDetail = (ids) => request.get(`/song/detail?ids=${ids}`)
 export const getLyric = (id) => request.get(`/lyric?id=${id}`)
+export const getNewLyric = (id) => request.get(`/lyric/new?id=${id}`)
 export const getPlaylistDetail = (id) => request.get(`/playlist/detail?id=${id}`)
 export const getMvAll = (area = '全部', limit = 10) => request.get(`/mv/all?area=${area}&limit=${limit}`)
 export const cloudSearch = (keywords, type = 1) => request.get(`/cloudsearch?keywords=${keywords}&type=${type}`)

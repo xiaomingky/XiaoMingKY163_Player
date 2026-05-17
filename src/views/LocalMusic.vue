@@ -2,7 +2,7 @@
 import { usePlayerStore } from '../store/player'
 import { FolderOpen, Play, Search, Download, Trash2, FolderPlus, CheckSquare, Square, Image, ImagePlay, Edit3, X, Camera } from 'lucide-vue-next'
 import { ref, computed } from 'vue'
-import { cloudSearch, getLyric } from '../api'
+import { cloudSearch, getNewLyric } from '../api'
 import { useMessageStore } from '../store/message'
 
 const playerStore = usePlayerStore()
@@ -58,12 +58,19 @@ const findLyrics = async (song) => {
         const match = searchRes.result?.songs?.[0]
         if (!match) { messageStore.info(`《${song.name}》未找到匹配的在线歌词`); return; }
 
-        const lyricRes = await getLyric(match.id)
+        const lyricRes = await getNewLyric(match.id)
         const lrc = lyricRes.lrc?.lyric || ''
         const tlrc = lyricRes.tlyric?.lyric || ''
-        if (!lrc) { messageStore.info(`《${song.name}》暂无歌词文本`); return; }
+        const yrcRaw = lyricRes.yrc?.lyric || ''
+        const ytlrcRaw = lyricRes.ytlrc?.lyric || ''
+        
+        if (!lrc && !yrcRaw) { messageStore.info(`《${song.name}》暂无歌词文本`); return; }
 
-        const fullContent = tlrc ? `${lrc}\n---trans---\n${tlrc}` : lrc
+        let fullContent = tlrc ? `${lrc}\n---trans---\n${tlrc}` : lrc
+        if (yrcRaw) {
+            fullContent += `\n---yrc---\n${yrcRaw}`
+            if (ytlrcRaw) fullContent += `\n---ytlrc---\n${ytlrcRaw}`
+        }
 
         const saveRes = await bridge.saveLyric({
             songPath: song.path,
@@ -73,11 +80,14 @@ const findLyrics = async (song) => {
         if (saveRes.success) {
             // 如果当前正在播放这首歌，刷新播放器歌词
             if (playerStore.currentSong.path === song.path) {
-                const lrc = lyricRes.lrc?.lyric || ''
-                const tlrc = lyricRes.tlyric?.lyric || ''
-                playerStore.parseLyrics(lrc, tlrc)
+                if (yrcRaw) {
+                    playerStore.parseYrcLyrics(yrcRaw, ytlrcRaw)
+                }
+                if (lrc) {
+                    playerStore.parseLyrics(lrc, tlrc)
+                }
             }
-            messageStore.success(`《${song.name}》${tlrc ? '双语歌词' : '歌词'}获取成功`)
+            messageStore.success(`《${song.name}》${yrcRaw ? '逐词歌词' : (tlrc ? '双语歌词' : '歌词')}获取成功`)
         } else {
             messageStore.error(`《${song.name}》保存歌词失败：${saveRes.error}`)
         }

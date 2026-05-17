@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import request, { getSongUrl, getLyric } from '../api'
+import request, { getSongUrl, getLyric, getNewLyric, cloudSearch } from '../api'
 import { useMessageStore } from './message'
 
 export const usePlayerStore = defineStore('player', {
@@ -24,6 +24,7 @@ export const usePlayerStore = defineStore('player', {
         showSongDetail: false,
         showPlaylist: false,
         lyrics: [],
+        yrcLyrics: null, // 逐词歌词数据: [{ time, duration, words: [{ startTime, duration, text }], ttext }]
         ctx: null,
         analyser: null,
         source: null,
@@ -32,9 +33,10 @@ export const usePlayerStore = defineStore('player', {
         showMvPlayer: false,
         currentMvId: null,
         currentMvUrl: '',
-        showDesktopLyrics: false,
+        showDesktopLyrics: localStorage.getItem('show_desktop_lyrics') === 'true',
         desktopLyricFont: '',
         desktopLyricColor: '#00E5FF',
+        bgMode: localStorage.getItem('player_bg_mode') || 'cover', // 'cover' | 'classic'
         audioDevices: [],
         currentDeviceId: localStorage.getItem('audio_device_id') || '',
         recentSongs: JSON.parse(localStorage.getItem('recent_songs') || '[]'),
@@ -69,6 +71,7 @@ export const usePlayerStore = defineStore('player', {
     }),
     actions: {
         initAudio() {
+            this.yrcLyrics = null // 重置逐词歌词
             if (this.audio) {
                 try { this.audio.pause(); this.audio.src = ''; this.audio.load() } catch (e) {}
                 this.audio = null
@@ -206,6 +209,10 @@ export const usePlayerStore = defineStore('player', {
             this.initAudio()
             if (!song || !song.id) return
 
+            // 清空旧歌曲的歌词缓存，防止切歌时闪烁上一首的歌词
+            this.lyrics = []
+            this.yrcLyrics = null
+
             // Update playlist if provided, otherwise ensure song is in current playlist
             if (list.length > 0) {
                 this.playlist = [...list]
@@ -289,21 +296,47 @@ export const usePlayerStore = defineStore('player', {
                 if (isLocal && song.path) {
                     const bridge = window.__ELECTRON_BRIDGE__ || window.bridge || window.ipcHandler
                     let lyricFound = false
+                    let hasYrcCache = false
 
                     if (bridge && bridge.loadLocalLyric) {
                         const lRes = await bridge.loadLocalLyric(song.path)
                         if (lRes.success) {
                             const content = lRes.lyric || ''
-                            // 如果本地文件包含双语（由保存逻辑生成），这里需要拆分或特殊处理
-                            // 简单起见，我们统一通过 parseLyrics 处理内容
-                            this.parseLyrics(content)
-                            lyricFound = true
+                            
+                            // 检测是否包含逐词歌词数据
+                            if (content.includes('---yrc---')) {
+                                const parts = content.split('---yrc---')
+                                const lrcPart = parts[0].trim()
+                                let yrcPart = parts[1] || ''
+                                let ytlrcPart = ''
+                                
+                                if (yrcPart.includes('---ytlrc---')) {
+                                    const yrcParts = yrcPart.split('---ytlrc---')
+                                    yrcPart = yrcParts[0].trim()
+                                    ytlrcPart = yrcParts[1] ? yrcParts[1].trim() : ''
+                                } else {
+                                    yrcPart = yrcPart.trim()
+                                }
+                                
+                                if (yrcPart) {
+                                    this.parseYrcLyrics(yrcPart, ytlrcPart)
+                                    hasYrcCache = true
+                                }
+                                if (lrcPart) {
+                                    this.parseLyrics(lrcPart)
+                                }
+                                lyricFound = true
+                            } else {
+                                // 普通歌词，先显示但后续尝试在线补充 yrc
+                                this.parseLyrics(content)
+                                lyricFound = true
+                            }
                         }
                     }
 
-                    if (!lyricFound) {
+                    // 没有歌词 或 有歌词但没有逐词数据 → 在线搜索补充
+                    if (!lyricFound || !hasYrcCache) {
                         try {
-                            // 优化搜索词：移除“本地音乐”、“未知歌手”等占位符
                             const cleanArtist = String(normalized.artist).replace(/本地音乐|未知歌手|Unknown Artist/g, '').trim()
                             const searchQuery = cleanArtist ? `${normalized.name} ${cleanArtist}` : normalized.name
                             console.log('--- [Lyric Search] Query:', searchQuery)
@@ -311,7 +344,6 @@ export const usePlayerStore = defineStore('player', {
                             let sRes = await cloudSearch(searchQuery)
                             let match = sRes.result?.songs?.[0]
 
-                            // 备选：如果搜索不到，尝试剥离括号中的附加信息（如 (NEW EDIT), [Live] 等）
                             if (!match) {
                                 const strippedName = normalized.name.replace(/\(.*\)|\[.*\]|（.*）|【.*】/g, '').trim()
                                 if (strippedName && strippedName !== normalized.name) {
@@ -323,26 +355,43 @@ export const usePlayerStore = defineStore('player', {
 
                             if (match) {
                                 console.log('--- [Lyric Search] Matched song ID:', match.id)
-                                const lResOnline = await getLyric(match.id)
+                                const lResOnline = await getNewLyric(match.id)
+                                const yrcRaw = lResOnline.yrc?.lyric || ''
+                                const ytlrcRaw = lResOnline.ytlrc?.lyric || ''
                                 const lrc = lResOnline.lrc?.lyric || ''
                                 const tlrc = lResOnline.tlyric?.lyric || ''
 
-                                this.parseLyrics(lrc, tlrc)
+                                if (yrcRaw) {
+                                    this.parseYrcLyrics(yrcRaw, ytlrcRaw)
+                                    if (lrc) this.parseLyrics(lrc, tlrc)
+                                } else if (lrc && !lyricFound) {
+                                    this.yrcLyrics = null
+                                    this.parseLyrics(lrc, tlrc)
+                                }
 
-                                if (bridge && bridge.saveLyric && lrc) {
-                                    // 保存时保留标识，方便下次解析
-                                    const fullLyricText = tlrc ? `${lrc}\n---trans---\n${tlrc}` : lrc
+                                if (bridge && bridge.saveLyric && (lrc || yrcRaw)) {
+                                    let fullLyricText = tlrc ? `${lrc}\n---trans---\n${tlrc}` : lrc
+                                    if (yrcRaw) {
+                                        fullLyricText += `\n---yrc---\n${yrcRaw}`
+                                        if (ytlrcRaw) {
+                                            fullLyricText += `\n---ytlrc---\n${ytlrcRaw}`
+                                        }
+                                    }
                                     bridge.saveLyric({
                                         songPath: song.path,
                                         lyricContent: fullLyricText
                                     })
+                                    
+                                    // 自动匹配成功时通知用户
+                                    const { useMessageStore } = await import('./message')
+                                    useMessageStore().success(`已自动为您匹配并下载《${normalized.name}》的${yrcRaw ? '逐词' : '普通'}歌词`)
                                 }
-                            } else {
+                            } else if (!lyricFound) {
                                 this.lyrics = []
                             }
                         } catch (e) {
                             console.error('Auto lyric search failed:', e)
-                            this.lyrics = []
+                            if (!lyricFound) this.lyrics = []
                         }
                     }
                 } else if (song.id) {
@@ -356,9 +405,24 @@ export const usePlayerStore = defineStore('player', {
                             if (fileRes.success && fileRes.lyric) {
                                 console.log(`--- [Lyric] 从文件缓存加载: ${song.name}`)
                                 
-                                // 解析缓存的歌词内容
                                 let cachedLrc = fileRes.lyric
                                 let cachedTlrc = ''
+                                let cachedYrc = ''
+                                let cachedYtlrc = ''
+                                
+                                // 提取 yrc 逐词数据
+                                if (cachedLrc.includes('---yrc---')) {
+                                    const yrcParts = cachedLrc.split('---yrc---')
+                                    cachedLrc = yrcParts[0]
+                                    cachedYrc = yrcParts[1] || ''
+                                    if (cachedYrc.includes('---ytlrc---')) {
+                                        const ytParts = cachedYrc.split('---ytlrc---')
+                                        cachedYrc = ytParts[0].trim()
+                                        cachedYtlrc = ytParts[1] ? ytParts[1].trim() : ''
+                                    } else {
+                                        cachedYrc = cachedYrc.trim()
+                                    }
+                                }
                                 
                                 // 处理带 ---trans--- 标识的合并歌词
                                 if (cachedLrc.includes('---trans---')) {
@@ -374,6 +438,9 @@ export const usePlayerStore = defineStore('player', {
                                                    .replace(/^\[saved:.*\]\n?/gm, '')
                                                    .trim()
                                 
+                                if (cachedYrc) {
+                                    this.parseYrcLyrics(cachedYrc, cachedYtlrc)
+                                }
                                 if (cachedLrc) {
                                     this.parseLyrics(cachedLrc, cachedTlrc)
                                     fileCacheLoaded = true
@@ -391,6 +458,10 @@ export const usePlayerStore = defineStore('player', {
                         if (cachedLyric) {
                             try {
                                 const cached = JSON.parse(cachedLyric)
+                                // 优先加载 yrc 逐词歌词
+                                if (cached.yrc) {
+                                    this.parseYrcLyrics(cached.yrc, cached.ytlrc || '')
+                                }
                                 if (cached.lrc) {
                                     this.parseLyrics(cached.lrc, cached.tlrc || '')
                                     console.log(`--- [Lyric] 使用localStorage缓存: ${cached.songName || song.name}`)
@@ -401,28 +472,46 @@ export const usePlayerStore = defineStore('player', {
                         }
                     }
                     
-                    // 请求最新歌词并更新缓存
-                    getLyric(song.id).then(lRes => {
+                    // 请求最新歌词（优先使用 /lyric/new 获取逐词歌词）
+                    getNewLyric(song.id).then(lRes => {
+                        const yrcRaw = lRes.yrc?.lyric || ''
+                        const ytlrcRaw = lRes.ytlrc?.lyric || ''
                         const lrc = lRes.lrc?.lyric || ''
                         const tlrc = lRes.tlyric?.lyric || ''
                         
-                        if (lrc) {
+                        if (yrcRaw) {
+                            // 有逐词歌词，解析 yrc
+                            this.parseYrcLyrics(yrcRaw, ytlrcRaw)
+                            // 同时也解析普通歌词作为 fallback
+                            if (lrc) this.parseLyrics(lrc, tlrc)
+                        } else if (lrc) {
+                            this.yrcLyrics = null
                             this.parseLyrics(lrc, tlrc)
-                            
-                            // 保存到 localStorage 缓存
+                        }
+                        
+                        // 保存到 localStorage 缓存
+                        if (lrc || yrcRaw) {
                             try {
-                                const lyricData = { lrc, tlrc, savedAt: Date.now(), songName: normalized.name }
+                                const lyricData = { lrc, tlrc, yrc: yrcRaw, ytlrc: ytlrcRaw, savedAt: Date.now(), songName: normalized.name }
                                 localStorage.setItem(cacheKey, JSON.stringify(lyricData))
                             } catch (e) { /* ignore */ }
                             
                             // 保存到 Electron 本地文件（支持离线使用）
                             if (bridge && bridge.saveOnlineLyric) {
+                                // 保存时也带上 yrc 数据
+                                let saveLrc = lrc
+                                let saveTlrc = tlrc
+                                if (yrcRaw) {
+                                    saveLrc = (tlrc ? `${lrc}\n---trans---\n${tlrc}` : lrc) + `\n---yrc---\n${yrcRaw}`
+                                    if (ytlrcRaw) saveLrc += `\n---ytlrc---\n${ytlrcRaw}`
+                                    saveTlrc = '' // 已经合并到 saveLrc 中
+                                }
                                 bridge.saveOnlineLyric({
                                     songId: String(song.id),
                                     songName: normalized.name,
                                     artist: normalized.artist,
-                                    lrc: lrc,
-                                    tlrc: tlrc
+                                    lrc: saveLrc,
+                                    tlrc: saveTlrc
                                 }).catch(e => console.error('File lyric save error:', e))
                             }
                         }
@@ -639,6 +728,95 @@ export const usePlayerStore = defineStore('player', {
                 }
             })
         },
+        /**
+         * 解析逐词歌词 (yrc 格式)
+         * 格式: [lineStart,lineDuration](wordStart,wordDurationCentiseconds,0)text...
+         * wordDuration 单位是厘秒 (0.01s) 根据文档
+         * 但实际 API 返回的似乎是毫秒，这里按毫秒处理
+         */
+        parseYrcLyrics(yrcRaw, ytlrcRaw) {
+            if (!yrcRaw) {
+                this.yrcLyrics = null
+                return
+            }
+
+            const lines = yrcRaw.split('\n')
+            const result = []
+
+            // 解析 ytlrc 翻译歌词（标准 LRC 时间戳格式）
+            const transMap = new Map()
+            if (ytlrcRaw) {
+                const tLines = ytlrcRaw.split('\n')
+                const tPattern = /\[(\d{2,3}):(\d{2})(?:[.:](\d{1,3}))?\]/
+                tLines.forEach(tl => {
+                    const m = tl.match(tPattern)
+                    if (m) {
+                        const min = parseInt(m[1])
+                        const sec = parseInt(m[2])
+                        const msPart = m[3] || '0'
+                        let ms = 0
+                        if (msPart.length === 3) ms = parseInt(msPart) / 1000
+                        else if (msPart.length === 2) ms = parseInt(msPart) / 100
+                        else ms = parseInt(msPart) / 10
+                        const timeMs = Math.round((min * 60 + sec + ms) * 1000)
+                        const text = tl.replace(tPattern, '').trim()
+                        if (text) transMap.set(timeMs, text)
+                    }
+                })
+            }
+
+            lines.forEach(line => {
+                // 跳过 JSON 元数据行
+                if (line.trim().startsWith('{')) return
+                if (!line.trim()) return
+
+                // 匹配行头: [lineStart,lineDuration]
+                const lineHeaderMatch = line.match(/^\s*\[(\d+),(\d+)\]/)
+                if (!lineHeaderMatch) return
+
+                const lineStartMs = parseInt(lineHeaderMatch[1])
+                const lineDurationMs = parseInt(lineHeaderMatch[2])
+
+                // 提取所有逐字: (wordStart,wordDuration,flag)text
+                const wordPattern = /\((\d+),(\d+),(\d+)\)([^(]*)/g
+                const words = []
+                let m
+                while ((m = wordPattern.exec(line)) !== null) {
+                    const wordStartMs = parseInt(m[1])
+                    const wordDurationMs = parseInt(m[2]) // API 实际返回毫秒
+                    const text = m[4]
+                    if (text) {
+                        words.push({
+                            startTime: wordStartMs, // 毫秒
+                            duration: wordDurationMs, // 毫秒
+                            text: text
+                        })
+                    }
+                }
+
+                if (words.length > 0) {
+                    // 查找翻译（允许 500ms 误差匹配）
+                    let ttext = ''
+                    for (const [tMs, tText] of transMap) {
+                        if (Math.abs(tMs - lineStartMs) < 500) {
+                            ttext = tText
+                            break
+                        }
+                    }
+
+                    result.push({
+                        time: lineStartMs / 1000, // 转为秒，兼容现有的 currentLyricIndex
+                        startTime: lineStartMs,
+                        duration: lineDurationMs,
+                        words: words,
+                        text: words.map(w => w.text).join(''), // fallback 纯文本
+                        ttext: ttext
+                    })
+                }
+            })
+
+            this.yrcLyrics = result.length > 0 ? result : null
+        },
         async playMv(id) {
             if (!id) return
             // Pause music if playing
@@ -773,8 +951,13 @@ export const usePlayerStore = defineStore('player', {
             localStorage.setItem('playback_rate', rate)
             if (this.audio) this.audio.playbackRate = rate
         },
+        toggleBgMode() {
+            this.bgMode = this.bgMode === 'cover' ? 'classic' : 'cover'
+            localStorage.setItem('player_bg_mode', this.bgMode)
+        },
         toggleDesktopLyrics() {
             this.showDesktopLyrics = !this.showDesktopLyrics
+            localStorage.setItem('show_desktop_lyrics', this.showDesktopLyrics)
             const bridge = window.__ELECTRON_BRIDGE__ || window.bridge || window.ipcHandler
             if (bridge && bridge.send) {
                 bridge.send('toggle-desktop-lyrics', this.showDesktopLyrics)
@@ -788,23 +971,46 @@ export const usePlayerStore = defineStore('player', {
             const bridge = window.__ELECTRON_BRIDGE__ || window.bridge || window.ipcHandler
             if (!bridge || !bridge.send) return
 
+            const useLyrics = (this.yrcLyrics && this.yrcLyrics.length > 0) ? this.yrcLyrics : this.lyrics
+            if (!useLyrics || useLyrics.length === 0) {
+                bridge.send('update-lyric-state', {
+                    lyric: '茗韵时光',
+                    tlyric: '',
+                    prevLyric: '',
+                    nextLyric: '',
+                    nextTlyric: '',
+                    isPlaying: this.isPlaying,
+                    songName: this.currentSong.name || '',
+                    artist: this.currentSong.artist || '',
+                    picUrl: this.currentSong.al?.picUrl || '',
+                    font: this.desktopLyricFont,
+                    color: this.desktopLyricColor,
+                    words: null,
+                    currentMs: this.currentTime * 1000
+                })
+                return
+            }
+
+            // 完美对齐 SongDetail 相同的歌词定位算法
             let idx = -1
             const time = this.currentTime + 0.2
-            for (let i = 0; i < this.lyrics.length; i++) {
-                if (time < this.lyrics[i].time) {
+            for (let i = 0; i < useLyrics.length; i++) {
+                if (time < useLyrics[i].time) {
                     idx = i - 1
                     break
                 }
             }
-            if (idx === -1) idx = this.lyrics.length - 1
-            if (idx < 0) idx = 0
+            if (idx === -1 && time >= useLyrics[useLyrics.length - 1].time) {
+                idx = useLyrics.length - 1
+            }
 
-            const currentLine = this.lyrics[idx] || null
-            const nextLine = this.lyrics[idx + 1] || null
-            const prevLine = idx > 0 ? this.lyrics[idx - 1] : null
+            // 如果处于前奏间奏（idx 为 -1），当前歌词显示为空（或前奏提示），下一句展示第一句歌词
+            const currentLine = idx >= 0 ? useLyrics[idx] : null
+            const nextLine = idx >= 0 ? (useLyrics[idx + 1] || null) : (useLyrics[0] || null)
+            const prevLine = idx > 0 ? useLyrics[idx - 1] : null
 
             bridge.send('update-lyric-state', {
-                lyric: currentLine ? currentLine.text : '茗韵时光',
+                lyric: currentLine ? currentLine.text : '',
                 tlyric: currentLine ? currentLine.ttext || '' : '',
                 prevLyric: prevLine ? prevLine.text : '',
                 nextLyric: nextLine ? nextLine.text : '',
@@ -812,8 +1018,12 @@ export const usePlayerStore = defineStore('player', {
                 isPlaying: this.isPlaying,
                 songName: this.currentSong.name || '',
                 artist: this.currentSong.artist || '',
+                picUrl: this.currentSong.al?.picUrl || '',
                 font: this.desktopLyricFont,
-                color: this.desktopLyricColor
+                color: this.desktopLyricColor,
+                // 逐词精准字段与毫秒基准
+                words: currentLine?.words || null,
+                currentMs: this.currentTime * 1000
             })
         },
         setFont(font) {

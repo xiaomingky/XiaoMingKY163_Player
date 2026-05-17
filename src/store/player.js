@@ -971,7 +971,24 @@ export const usePlayerStore = defineStore('player', {
             const bridge = window.__ELECTRON_BRIDGE__ || window.bridge || window.ipcHandler
             if (!bridge || !bridge.send) return
 
-            const useLyrics = (this.yrcLyrics && this.yrcLyrics.length > 0) ? this.yrcLyrics : this.lyrics
+            const isYrcSong = !!(this.yrcLyrics && this.yrcLyrics.length > 0)
+            if (isYrcSong) {
+                bridge.send('update-lyric-state', {
+                    lyric: '当前为逐词歌曲',
+                    tlyric: '桌面歌词暂不支持逐词展示',
+                    prevLyric: '', nextLyric: '', nextTlyric: '',
+                    isPlaying: this.isPlaying,
+                    songName: this.currentSong.name || '',
+                    artist: this.currentSong.artist || '',
+                    picUrl: this.currentSong.al?.picUrl || '',
+                    font: this.desktopLyricFont,
+                    color: this.desktopLyricColor,
+                    words: null,
+                    currentMs: this.currentTime * 1000
+                })
+                return
+            }
+            const useLyrics = this.lyrics
             if (!useLyrics || useLyrics.length === 0) {
                 bridge.send('update-lyric-state', {
                     lyric: '茗韵时光',

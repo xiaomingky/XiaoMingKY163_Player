@@ -270,6 +270,15 @@ async function loadCache() {
 async function forceReAnalyze() {
     analysisResult.value = null
     errorMsg.value = ''; batchProgress.value = ''; savedMsg.value = ''
+    // 清除该歌曲的缓存，确保重新解析
+    localStorage.removeItem(`en_analysis_${cacheKey.value}`)
+    const bridge = getBridge()
+    if (bridge?.invoke && props.songPath) {
+        try { await bridge.invoke('save-english-analysis', { songPath: props.songPath, analysis: { lines: [] } }) } catch (e) {}
+    }
+    if (bridge?.invoke && props.songId && !props.songPath) {
+        try { await bridge.invoke('save-online-english-analysis', { songId: String(props.songId), songName: props.songName, artist: props.artist, analysis: { lines: [] } }) } catch (e) {}
+    }
 }
 
 async function runAnalysis() {
@@ -452,7 +461,7 @@ function getTenseColor(t) {
             <div class="model-select-box">
                 <select v-model="aiModel" @change="saveModel($event.target.value)" class="model-select">
                     <option value="deepseek">DeepSeek</option>
-                    <option value="mimo">MiMo v2.5-pro</option>
+                    <option value="mimo">MiMo v2.5</option>
                 </select>
             </div>
             <div v-if="aiModel === 'deepseek'" class="api-key-box">

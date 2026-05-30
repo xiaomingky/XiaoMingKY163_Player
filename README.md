@@ -154,15 +154,20 @@ const request = axios.create({
 })
 ```
 
-### 2. DeepSeek API Key（英文解析）
+### 2. AI 模型 API Key（英文歌词解析）
 
-英文歌词解析功能需要 **DeepSeek API Key**。
+英文歌词解析功能支持两种 AI 模型：
 
-获取地址：https://platform.deepseek.com
+| 模型 | 获取地址 | 说明 |
+|------|----------|------|
+| DeepSeek | https://platform.deepseek.com | 默认模型 |
+| MiMo v2.5-pro | https://api.xiaomimimo.com | 新增模型，解析更快 |
 
-两种方式：
-- 在应用界面的英文解析面板中输入（自动保存到本地）
-- 或在 `src/components/EnglishAnalysis.vue` 中设置默认值
+**配置方式：**
+1. 启动应用后进入「本地音乐」页面
+2. 在英文解析面板选择模型
+3. 输入对应的 API Key（自动保存到本地）
+4. 或在应用界面的英文解析面板中直接输入
 
 ---
 

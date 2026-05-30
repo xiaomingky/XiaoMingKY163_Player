@@ -155,15 +155,20 @@ const request = axios.create({
 })
 ```
 
-### 2. DeepSeek API Key
+### 2. AI Model API Key (English Lyrics Analysis)
 
-The English lyrics analysis feature requires a **DeepSeek API Key**.
+The English lyrics analysis supports two AI models:
 
-Get one at: https://platform.deepseek.com
+| Model | Get Key | Note |
+|-------|---------|------|
+| DeepSeek | https://platform.deepseek.com | Default |
+| MiMo v2.5-pro | https://api.xiaomimimo.com | New, faster |
 
-Two options:
-- Enter it in the app UI (saved automatically to localStorage)
-- Or set a default in `src/components/EnglishAnalysis.vue`
+**How to configure:**
+1. Launch the app and go to "Local Music"
+2. In the English analysis panel, select a model
+3. Enter the corresponding API Key (saved automatically)
+
 
 ---
 

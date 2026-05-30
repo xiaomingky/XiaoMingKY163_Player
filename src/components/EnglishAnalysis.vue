@@ -45,10 +45,15 @@ const cacheKey = computed(() => {
 
 const apiKey = ref(localStorage.getItem('deepseek_api_key') || '')
 const aiModel = ref(localStorage.getItem('ai_model') || 'deepseek')
+const mimoKey = ref(localStorage.getItem('mimo_api_key') || '')
 
 function saveApiKey(value) {
     localStorage.setItem('deepseek_api_key', value.trim())
     apiKey.value = value.trim()
+}
+function saveMimoKey(value) {
+    localStorage.setItem('mimo_api_key', value.trim())
+    mimoKey.value = value.trim()
 }
 function saveModel(value) {
     localStorage.setItem('ai_model', value)
@@ -90,7 +95,7 @@ async function callDeepSeekBatch(linesBatch, batchIdx, totalBatches) {
     const estTokens = Math.min(16384, 2048 + linesBatch.length * 1536)
 
     const isMimo = aiModel.value === 'mimo'
-    const mimoKey = 'sk-cdyoqg5qn3ezark6mq821i71bstsz8cfo1st4qu0p6nam9sa'
+    const mimoKey = mimoKey.value || ''
     const apiUrl = isMimo ? 'https://api.xiaomimimo.com/v1/chat/completions' : 'https://api.deepseek.com/v1/chat/completions'
     const model = isMimo ? 'mimo-v2.5-pro' : 'deepseek-chat'
     const key = isMimo ? mimoKey : apiKey.value
@@ -468,7 +473,13 @@ function getTenseColor(t) {
                 />
             </div>
             <div v-else class="api-key-box">
-                <span class="mimo-hint">MiMo v2.5-pro 服务端内置 Key，无需输入</span>
+                <input
+                    type="password"
+                    :value="mimoKey"
+                    placeholder="输入你的 MiMo API Key"
+                    @input="saveMimoKey($event.target.value)"
+                    class="api-key-input"
+                />
             </div>
             <button class="btn-start" @click="startAnalysis"><Sparkles :size="16" /> 开始解析</button>
         </div>

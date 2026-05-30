@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const request = axios.create({
-    baseURL: 'https://api.xiaomingky.cn',
+    baseURL: 'https://your-netease-api-server.com',
     timeout: 30000,
     withCredentials: true
 })
